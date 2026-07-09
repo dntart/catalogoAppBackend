@@ -1,0 +1,79 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Categoria {
+  MATERIAL
+  PRODUCTO
+}
+
+enum Unidad {
+  METRO
+  KG
+  CONO
+  UNIDAD
+}
+
+enum MovimientoTipo {
+  COMPRA
+  CONSUMO
+  PRODUCCION
+  VENTA
+  AJUSTE
+}
+
+model Item {
+  id          String   @id @default(uuid())
+  nombre      String
+  categoria   Categoria
+  unidad      Unidad
+  tieneColor  Boolean  @default(false)
+  colorNombre String?
+  imagenUrl   String?
+  activo      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  movimientos Movimiento[]
+
+  @@unique([nombre, colorNombre])
+  @@map("items")
+}
+
+model Operario {
+  id        String   @id @default(uuid())
+  nombre    String
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  movimientos Movimiento[]
+
+  @@map("operarios")
+}
+
+model Movimiento {
+  id            String         @id @default(uuid())
+  itemId        String
+  operarioId    String?
+  tipo          MovimientoTipo
+  cantidad      Decimal        @db.Decimal(10, 2)
+  fecha         DateTime       @default(now())
+  observaciones String?
+  createdAt     DateTime       @default(now())
+
+  item     Item      @relation(fields: [itemId], references: [id])
+  operario Operario? @relation(fields: [operarioId], references: [id])
+
+  @@index([itemId])
+  @@index([operarioId])
+  @@map("movimientos")
+}
