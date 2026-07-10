@@ -29,6 +29,7 @@ Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y 
 - **Prisma 6** como ORM, generador clásico `prisma-client-js`
 - **PostgreSQL 16**, corriendo en Docker vía `docker-compose.yml`
 - **class-validator** / **class-transformer** para DTOs
+- **@nestjs/swagger** para documentación OpenAPI interactiva (`/docs`)
 - **Jest** para tests unitarios
 
 ## Arquitectura
@@ -133,7 +134,7 @@ npm run db:seed
 npm run start:dev
 ```
 
-La API queda en `http://localhost:3000`.
+La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI) en `http://localhost:3000/docs`, y el spec OpenAPI crudo en `http://localhost:3000/docs-json`.
 
 ## Variables de entorno
 
@@ -160,6 +161,8 @@ La API queda en `http://localhost:3000`.
 | `npx prisma studio` | UI para explorar la base |
 
 ## API — endpoints
+
+> Documentación interactiva completa (probar requests, ver schemas) en `/docs` una vez levantada la API. Lo que sigue es un resumen de referencia rápida.
 
 **Items** (`/items`)
 - `POST /items` — crear (`CreateItemDto`)
@@ -220,7 +223,7 @@ npx @nestjs/cli new . --package-manager npm --skip-git --language ts
 
 ```bash
 npm install prisma --save-dev
-npm install @prisma/client class-validator class-transformer @nestjs/config @nestjs/mapped-types
+npm install @prisma/client class-validator class-transformer @nestjs/config @nestjs/swagger
 npx prisma init --datasource-provider postgresql
 ```
 
@@ -262,7 +265,7 @@ npx prisma migrate dev --name init
 
 ### 4. Estructura de cada módulo de dominio
 
-Por cada entidad (`items`, `operarios`, ...): `dto/create-*.dto.ts`, `dto/update-*.dto.ts` (con `PartialType`), `*.repository.ts` (única capa que importa `PrismaService`), `*.service.ts` (reglas de negocio, `NotFoundException` si no existe), `*.controller.ts` (HTTP puro), `*.module.ts` (wiring + `exports` del `Service` si otro módulo lo necesita).
+Por cada entidad (`items`, `operarios`, ...): `dto/create-*.dto.ts`, `dto/update-*.dto.ts` (con `PartialType` de `@nestjs/swagger`, no de `@nestjs/mapped-types` — ver paso 9), `entities/*.entity.ts` (forma de la respuesta para Swagger), `*.repository.ts` (única capa que importa `PrismaService`), `*.service.ts` (reglas de negocio, `NotFoundException` si no existe), `*.controller.ts` (HTTP puro), `*.module.ts` (wiring + `exports` del `Service` si otro módulo lo necesita).
 
 ### 5. El motor de stock como módulo aparte
 
@@ -295,6 +298,30 @@ npm run db:seed
 ### 8. Regla "nunca `any`"
 
 `eslint.config.mjs` trae por defecto `@typescript-eslint/no-explicit-any: 'off'` (así viene el starter de NestJS). Se lo cambió a `'error'` para que el lint la haga cumplir en todo el proyecto, tests incluidos.
+
+### 9. Swagger / OpenAPI
+
+```bash
+npm install @nestjs/swagger
+```
+
+En `src/main.ts`, después del `ValidationPipe`:
+
+```ts
+const swaggerConfig = new DocumentBuilder()
+  .setTitle('<Nombre> API')
+  .setDescription('...')
+  .setVersion('1.0')
+  .build();
+const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+SwaggerModule.setup('docs', app, swaggerDocument);
+```
+
+Tres cosas para que el schema generado sea útil y no solo `{}`:
+
+- **DTOs**: decorar cada campo con `@ApiProperty()` / `@ApiPropertyOptional()` (enums con `{ enum: MiEnum }`). Sin esto, el body del request se documenta como un objeto vacío.
+- **`PartialType` de `@nestjs/swagger`, no de `@nestjs/mapped-types`**: el de `mapped-types` solo replica la metadata de `class-validator`; el de `@nestjs/swagger` replica *además* la metadata de OpenAPI (y de paso la de `class-validator`), así que reemplaza al otro paquete por completo. Por eso se desinstaló `@nestjs/mapped-types`.
+- **Entities de respuesta**: los `Controller` devuelven directamente los tipos de Prisma (`Item`, `Movimiento`, ...), que no tienen decoradores. Se crea una clase `entities/*.entity.ts` por modelo con `@ApiProperty()` en cada campo (mismo shape que el modelo Prisma) y se referencia con `@ApiResponse({ status, type: MiEntity })` en cada endpoint — el tipo de retorno real del método (`Promise<Item>`) no cambia, la entity es solo metadata para Swagger.
 
 ### 9. Tests unitarios de los `Service`
 
