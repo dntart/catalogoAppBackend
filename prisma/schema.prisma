@@ -32,6 +32,17 @@ enum MovimientoTipo {
   AJUSTE
 }
 
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  nombre       String
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@map("users")
+}
+
 model Item {
   id          String   @id @default(uuid())
   nombre      String
