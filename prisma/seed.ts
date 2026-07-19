@@ -1,3 +1,4 @@
+import * as bcrypt from 'bcrypt';
 import { Categoria, PrismaClient, Unidad } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -47,7 +48,29 @@ async function upsertOperario(nombre: string): Promise<void> {
   await prisma.operario.create({ data: { nombre } });
 }
 
+async function upsertOwnerUser(): Promise<void> {
+  const email = process.env.OWNER_EMAIL;
+  const password = process.env.OWNER_PASSWORD;
+  const nombre = process.env.OWNER_NOMBRE ?? 'Dueño';
+
+  if (!email || !password) {
+    throw new Error(
+      'Definí OWNER_EMAIL y OWNER_PASSWORD en .env antes de correr el seed (son las credenciales de login del dueño)',
+    );
+  }
+
+  const existente = await prisma.user.findUnique({ where: { email } });
+  if (existente) {
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.user.create({ data: { email, passwordHash, nombre } });
+}
+
 async function main(): Promise<void> {
+  await upsertOwnerUser();
+
   for (const nombre of PRODUCTOS) {
     await upsertItem(nombre, Categoria.PRODUCTO, Unidad.UNIDAD, null);
   }

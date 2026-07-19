@@ -7,13 +7,19 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Movimiento } from '@prisma/client';
 import { MovimientosService } from './movimientos.service';
 import { CreateMovimientoDto } from './dto/create-movimiento.dto';
 import { MovimientoEntity } from './entities/movimiento.entity';
 
 @ApiTags('movimientos')
+@ApiBearerAuth()
 @Controller('movimientos')
 export class MovimientosController {
   constructor(private readonly movimientosService: MovimientosService) {}

@@ -8,7 +8,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Item } from '@prisma/client';
 import { ItemsService } from './items.service';
 import { CreateItemDto } from './dto/create-item.dto';
@@ -16,6 +21,7 @@ import { UpdateItemDto } from './dto/update-item.dto';
 import { ItemEntity } from './entities/item.entity';
 
 @ApiTags('items')
+@ApiBearerAuth()
 @Controller('items')
 export class ItemsController {
   constructor(private readonly itemsService: ItemsService) {}

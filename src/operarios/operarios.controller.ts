@@ -8,7 +8,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Operario } from '@prisma/client';
 import { OperariosService } from './operarios.service';
 import { CreateOperarioDto } from './dto/create-operario.dto';
@@ -16,6 +21,7 @@ import { UpdateOperarioDto } from './dto/update-operario.dto';
 import { OperarioEntity } from './entities/operario.entity';
 
 @ApiTags('operarios')
+@ApiBearerAuth()
 @Controller('operarios')
 export class OperariosController {
   constructor(private readonly operariosService: OperariosService) {}

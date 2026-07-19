@@ -17,6 +17,8 @@ async function bootstrap() {
     .setTitle('Fauna de Tela API')
     .setDescription('Gestión de producción e inventario para Fauna de Tela')
     .setVersion('1.0')
+    .addBearerAuth()
+    .addTag('auth', 'Login del dueño del emprendimiento')
     .addTag('items', 'Catálogo de materiales y productos')
     .addTag('operarios', 'Personas que registran movimientos')
     .addTag('movimientos', 'Ledger de entradas y salidas de stock')

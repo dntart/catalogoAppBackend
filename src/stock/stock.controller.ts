@@ -1,9 +1,15 @@
 import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
-import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { StockService } from './stock.service';
 import { StockResponseEntity } from './entities/stock-response.entity';
 
 @ApiTags('stock')
+@ApiBearerAuth()
 @Controller('stock')
 export class StockController {
   constructor(private readonly stockService: StockService) {}

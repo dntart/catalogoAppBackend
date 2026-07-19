@@ -12,14 +12,15 @@ Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y 
 2. [Arquitectura](#arquitectura)
 3. [Modelo de datos](#modelo-de-datos)
 4. [Motor de stock](#motor-de-stock)
-5. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
-6. [Variables de entorno](#variables-de-entorno)
-7. [Scripts disponibles](#scripts-disponibles)
-8. [API — endpoints](#api--endpoints)
-9. [Testing](#testing)
-10. [Troubleshooting](#troubleshooting)
-11. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
-12. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
+5. [Autenticación](#autenticación)
+6. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
+7. [Variables de entorno](#variables-de-entorno)
+8. [Scripts disponibles](#scripts-disponibles)
+9. [API — endpoints](#api--endpoints)
+10. [Testing](#testing)
+11. [Troubleshooting](#troubleshooting)
+12. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
+13. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
 
 ---
 
@@ -30,6 +31,7 @@ Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y 
 - **PostgreSQL 16**, corriendo en Docker vía `docker-compose.yml`
 - **class-validator** / **class-transformer** para DTOs
 - **@nestjs/swagger** para documentación OpenAPI interactiva (`/docs`)
+- **@nestjs/jwt** + **passport-jwt** + **bcrypt** para autenticación
 - **Jest** para tests unitarios
 
 ## Arquitectura
@@ -47,6 +49,8 @@ Ningún Controller llama a un Repository directamente, y ningún Service arma qu
 ```
 src/
   prisma/           PrismaService global (conecta/desconecta el cliente)
+  users/            Repository/Service internos, sin controller (lo usa auth)
+  auth/             Login JWT, guard global, decorator @Public
   items/            Catálogo de materiales y productos
   operarios/         Personas que hacen movimientos (ej. María, Luján)
   movimientos/       Ledger de entradas/salidas de stock
@@ -63,6 +67,16 @@ src/
 - `Categoria`: `MATERIAL` | `PRODUCTO`
 - `Unidad`: `METRO` | `KG` | `CONO` | `UNIDAD`
 - `MovimientoTipo`: `COMPRA` | `CONSUMO` | `PRODUCCION` | `VENTA` | `AJUSTE`
+
+**User** — el dueño del emprendimiento (o cualquier otra persona con acceso a la app; no confundir con `Operario`, ver [Autenticación](#autenticación))
+| campo | tipo |
+|---|---|
+| id | String (uuid) |
+| email | String (unique) |
+| passwordHash | String |
+| nombre | String |
+| activo | Boolean |
+| createdAt | DateTime |
 
 **Item** — catálogo de materiales y productos
 | campo | tipo | notas |
@@ -111,6 +125,21 @@ Antes de crear un movimiento de `CONSUMO` o `VENTA`, `MovimientosService.create(
 
 Los cálculos usan `Prisma.Decimal` en vez de `number` en los pasos intermedios para evitar errores de redondeo de punto flotante al sumar/restar cantidades.
 
+## Autenticación
+
+`User` y `Operario` son conceptos distintos y no deben confundirse:
+
+- **`User`** es quien usa la aplicación — hoy, el dueño del emprendimiento. Tiene email + contraseña y es quien hace login.
+- **`Operario`** (María, Luján) **no tiene login ni contraseña**: es solo una etiqueta (`operarioId`) dentro de `Movimiento` para registrar a quién se le entregó material o quién produjo. El dueño es el único que interactúa con el sistema; los operarios no cargan nada ellos mismos.
+
+Login vía JWT (`src/auth`):
+
+- `POST /auth/login` (público, `@Public()`) — recibe `{ email, password }`, devuelve `{ accessToken }`. El token expira según `JWT_EXPIRES_IN` (default `7d`).
+- `GET /auth/me` (protegido) — devuelve el usuario autenticado a partir del token.
+- **Todas las demás rutas están protegidas por default** vía un `JwtAuthGuard` global (`APP_GUARD` en `app.module.ts`). Para marcar una ruta como pública se usa el decorator `@Public()` (ver `src/auth/decorators/public.decorator.ts`), que el guard chequea con `Reflector` antes de exigir el token.
+- El token se manda como header `Authorization: Bearer <token>`. En Swagger UI (`/docs`), el botón **Authorize** permite pegar el token una vez y que se use en todos los requests de prueba.
+- Las contraseñas se guardan hasheadas con `bcrypt` (`passwordHash`, nunca en texto plano). El primer usuario (el dueño) se crea vía seed, no vía un endpoint de registro — no existe `POST /users` público, a propósito: no hay un flujo de alta de usuarios auto-servicio en esta v1.
+
 ## Puesta en marcha (proyecto ya clonado)
 
 Prerrequisitos: Node.js 20+, Docker Desktop con el motor corriendo (ver [Troubleshooting](#troubleshooting) si `docker info` falla).
@@ -118,7 +147,7 @@ Prerrequisitos: Node.js 20+, Docker Desktop con el motor corriendo (ver [Trouble
 ```bash
 npm install
 
-# copiar y ajustar si hace falta
+# copiar y completar: contraseña del dueño, JWT_SECRET, etc.
 cp .env.example .env
 
 # levantar Postgres en Docker
@@ -127,7 +156,8 @@ docker compose up -d
 # aplicar el schema
 npx prisma migrate dev
 
-# cargar el catálogo real del negocio
+# crea la cuenta de login del dueño (OWNER_EMAIL/OWNER_PASSWORD del .env)
+# + carga el catálogo real del negocio
 npm run db:seed
 
 # levantar la API en modo watch
@@ -142,6 +172,9 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 |---|---|---|
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/fauna_de_tela?schema=public` | leída por Prisma y por `docker-compose.yml` (usuario/clave/DB deben coincidir con los `environment:` del servicio `postgres`) |
 | `PORT` | `3000` | opcional, puerto HTTP (`src/main.ts`) |
+| `JWT_SECRET` | string aleatorio largo | firma los tokens (`src/auth`). Generar uno propio, nunca reusar el de ejemplo |
+| `JWT_EXPIRES_IN` | `7d` | opcional, vencimiento del token |
+| `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NOMBRE` | — | solo usados por `prisma/seed.ts` para crear la cuenta de login inicial del dueño; no se leen en runtime |
 
 `.env` está en `.gitignore`; `.env.example` es la plantilla versionada.
 
@@ -162,7 +195,11 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 
 ## API — endpoints
 
-> Documentación interactiva completa (probar requests, ver schemas) en `/docs` una vez levantada la API. Lo que sigue es un resumen de referencia rápida.
+> Documentación interactiva completa (probar requests, ver schemas) en `/docs` una vez levantada la API. Lo que sigue es un resumen de referencia rápida. Todas las rutas salvo `POST /auth/login` requieren header `Authorization: Bearer <token>`.
+
+**Auth** (`/auth`)
+- `POST /auth/login` — público. `{ email, password }` → `{ accessToken }`
+- `GET /auth/me` — usuario autenticado actual
 
 **Items** (`/items`)
 - `POST /items` — crear (`CreateItemDto`)
@@ -193,6 +230,7 @@ Tests unitarios de los `Service` (la capa con la lógica de negocio), con el `Re
 - `stock/stock.service.spec.ts` — suma/resta por tipo, signo de `AJUSTE`, validación de stock insuficiente
 - `movimientos/movimientos.service.spec.ts` — validación de item/operario, signo de cantidad por tipo, cuándo se llama a `validarStockSuficiente`
 - `items/items.service.spec.ts`, `operarios/operarios.service.spec.ts` — CRUD básico y manejo de `NotFoundException`
+- `auth/auth.service.spec.ts` — credenciales inválidas, usuario inactivo, y que `login` firme el payload correcto
 
 ```bash
 npm test
@@ -323,9 +361,26 @@ Tres cosas para que el schema generado sea útil y no solo `{}`:
 - **`PartialType` de `@nestjs/swagger`, no de `@nestjs/mapped-types`**: el de `mapped-types` solo replica la metadata de `class-validator`; el de `@nestjs/swagger` replica *además* la metadata de OpenAPI (y de paso la de `class-validator`), así que reemplaza al otro paquete por completo. Por eso se desinstaló `@nestjs/mapped-types`.
 - **Entities de respuesta**: los `Controller` devuelven directamente los tipos de Prisma (`Item`, `Movimiento`, ...), que no tienen decoradores. Se crea una clase `entities/*.entity.ts` por modelo con `@ApiProperty()` en cada campo (mismo shape que el modelo Prisma) y se referencia con `@ApiResponse({ status, type: MiEntity })` en cada endpoint — el tipo de retorno real del método (`Promise<Item>`) no cambia, la entity es solo metadata para Swagger.
 
-### 9. Tests unitarios de los `Service`
+### 10. Tests unitarios de los `Service`
 
 Sin levantar Nest ni la base: se instancia el `Service` a mano pasándole un objeto mock tipado como `{ metodo: jest.Mock }`, casteado con `as unknown as <Repository>` (necesario porque las clases de Nest tienen parámetros de constructor `private`, lo que las vuelve nominales para TypeScript). Ver cualquier `*.service.spec.ts` como referencia.
+
+### 11. Autenticación JWT
+
+```bash
+npm install @nestjs/jwt @nestjs/passport passport passport-jwt bcrypt
+npm install -D @types/passport-jwt @types/bcrypt
+```
+
+Piezas del módulo `auth` (ver [Autenticación](#autenticación) para el comportamiento):
+
+- Modelo `User` en `schema.prisma` (`email` unique, `passwordHash`, nunca la contraseña en texto plano).
+- `src/users`: `UsersRepository`/`UsersService` internos, **sin** `Controller` — no hace falta un CRUD público de usuarios para una sola cuenta dueño.
+- `src/auth/auth.service.ts`: `validateUser` compara con `bcrypt.compare`; `login` firma un JWT con `{ sub: user.id, email }` vía `JwtService`.
+- `src/auth/strategies/jwt.strategy.ts`: valida el token entrante y carga el usuario real (rechaza si está inactivo).
+- `src/auth/guards/jwt-auth.guard.ts` registrado como `APP_GUARD` global en `app.module.ts` — **toda ruta nueva queda protegida por default**. Para una ruta pública, decorarla con `@Public()` (el guard usa `Reflector` para detectar la metadata).
+- El seed (`prisma/seed.ts`) crea la cuenta inicial leyendo `OWNER_EMAIL`/`OWNER_PASSWORD`/`OWNER_NOMBRE` de `.env` — nunca hardcodear credenciales reales en un archivo versionado.
+- `DocumentBuilder().addBearerAuth()` en `main.ts` + `@ApiBearerAuth()` en cada controller protegido para que el botón "Authorize" de Swagger UI funcione.
 
 ## Cómo adaptar esta base a otro negocio
 
