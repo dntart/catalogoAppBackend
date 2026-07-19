@@ -66,25 +66,43 @@ model Operario {
   activo    Boolean  @default(true)
   createdAt DateTime @default(now())
 
-  movimientos Movimiento[]
+  movimientos       Movimiento[]
+  ordenesProduccion OrdenProduccion[]
 
   @@map("operarios")
 }
 
-model Movimiento {
-  id            String         @id @default(uuid())
-  itemId        String
-  operarioId    String?
-  tipo          MovimientoTipo
-  cantidad      Decimal        @db.Decimal(10, 2)
-  fecha         DateTime       @default(now())
+model OrdenProduccion {
+  id            String   @id @default(uuid())
+  operarioId    String
+  fecha         DateTime @default(now())
   observaciones String?
-  createdAt     DateTime       @default(now())
+  createdAt     DateTime @default(now())
 
-  item     Item      @relation(fields: [itemId], references: [id])
-  operario Operario? @relation(fields: [operarioId], references: [id])
+  operario    Operario     @relation(fields: [operarioId], references: [id])
+  movimientos Movimiento[]
+
+  @@index([operarioId])
+  @@map("ordenes_produccion")
+}
+
+model Movimiento {
+  id                String         @id @default(uuid())
+  itemId            String
+  operarioId        String?
+  ordenProduccionId String?
+  tipo              MovimientoTipo
+  cantidad          Decimal        @db.Decimal(10, 2)
+  fecha             DateTime       @default(now())
+  observaciones     String?
+  createdAt         DateTime       @default(now())
+
+  item            Item             @relation(fields: [itemId], references: [id])
+  operario        Operario?        @relation(fields: [operarioId], references: [id])
+  ordenProduccion OrdenProduccion? @relation(fields: [ordenProduccionId], references: [id])
 
   @@index([itemId])
   @@index([operarioId])
+  @@index([ordenProduccionId])
   @@map("movimientos")
 }

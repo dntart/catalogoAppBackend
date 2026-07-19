@@ -9,6 +9,7 @@ import { CreateMovimientoDto } from './dto/create-movimiento.dto';
 import { StockService } from '../stock/stock.service';
 import { ItemsService } from '../items/items.service';
 import { OperariosService } from '../operarios/operarios.service';
+import { OrdenesProduccionService } from '../ordenes-produccion/ordenes-produccion.service';
 
 const TIPOS_SALIDA: MovimientoTipo[] = [
   MovimientoTipo.CONSUMO,
@@ -22,13 +23,20 @@ export class MovimientosService {
     private readonly stockService: StockService,
     private readonly itemsService: ItemsService,
     private readonly operariosService: OperariosService,
+    private readonly ordenesProduccionService: OrdenesProduccionService,
   ) {}
 
   async create(dto: CreateMovimientoDto): Promise<Movimiento> {
     await this.itemsService.findOne(dto.itemId);
 
-    if (dto.operarioId) {
-      await this.operariosService.findOne(dto.operarioId);
+    let operarioId = dto.operarioId;
+    if (dto.ordenProduccionId) {
+      const orden = await this.ordenesProduccionService.findOne(
+        dto.ordenProduccionId,
+      );
+      operarioId = orden.operarioId;
+    } else if (operarioId) {
+      await this.operariosService.findOne(operarioId);
     }
 
     if (dto.tipo !== MovimientoTipo.AJUSTE && dto.cantidad <= 0) {
@@ -43,8 +51,9 @@ export class MovimientosService {
 
     return this.movimientosRepository.create({
       item: { connect: { id: dto.itemId } },
-      operario: dto.operarioId
-        ? { connect: { id: dto.operarioId } }
+      operario: operarioId ? { connect: { id: operarioId } } : undefined,
+      ordenProduccion: dto.ordenProduccionId
+        ? { connect: { id: dto.ordenProduccionId } }
         : undefined,
       tipo: dto.tipo,
       cantidad: dto.cantidad,

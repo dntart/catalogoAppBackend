@@ -11,6 +11,7 @@ import { StockModule } from './stock/stock.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { OrdenesProduccionModule } from './ordenes-produccion/ordenes-produccion.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     AuthModule,
     ItemsModule,
     OperariosModule,
+    OrdenesProduccionModule,
     MovimientosModule,
     StockModule,
   ],

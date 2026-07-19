@@ -11,6 +11,9 @@ export class MovimientoEntity {
   @ApiPropertyOptional({ nullable: true })
   operarioId!: string | null;
 
+  @ApiPropertyOptional({ nullable: true })
+  ordenProduccionId!: string | null;
+
   @ApiProperty({ enum: MovimientoTipo })
   tipo!: MovimientoTipo;
 

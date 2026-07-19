@@ -1,15 +1,26 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Item, Movimiento, MovimientoTipo, Operario } from '@prisma/client';
+import {
+  Item,
+  Movimiento,
+  MovimientoTipo,
+  Operario,
+  OrdenProduccion,
+} from '@prisma/client';
 import { MovimientosService } from './movimientos.service';
 import { MovimientosRepository } from './movimientos.repository';
 import { StockService } from '../stock/stock.service';
 import { ItemsService } from '../items/items.service';
 import { OperariosService } from '../operarios/operarios.service';
+import { OrdenesProduccionService } from '../ordenes-produccion/ordenes-produccion.service';
 import { CreateMovimientoDto } from './dto/create-movimiento.dto';
 
 const ITEM_MOCK = { id: 'item-1' } as Item;
 const OPERARIO_MOCK = { id: 'operario-1' } as Operario;
 const MOVIMIENTO_MOCK = { id: 'mov-1' } as Movimiento;
+const ORDEN_MOCK = {
+  id: 'orden-1',
+  operarioId: 'operario-de-la-orden',
+} as OrdenProduccion;
 
 function buildDto(
   overrides: Partial<CreateMovimientoDto> = {},
@@ -32,22 +43,26 @@ describe('MovimientosService', () => {
   let stockService: { validarStockSuficiente: jest.Mock };
   let itemsService: { findOne: jest.Mock };
   let operariosService: { findOne: jest.Mock };
+  let ordenesProduccionService: { findOne: jest.Mock };
 
   beforeEach(() => {
     repository = { create: jest.fn(), findAll: jest.fn(), findById: jest.fn() };
     stockService = { validarStockSuficiente: jest.fn() };
     itemsService = { findOne: jest.fn() };
     operariosService = { findOne: jest.fn() };
+    ordenesProduccionService = { findOne: jest.fn() };
 
     service = new MovimientosService(
       repository as unknown as MovimientosRepository,
       stockService as unknown as StockService,
       itemsService as unknown as ItemsService,
       operariosService as unknown as OperariosService,
+      ordenesProduccionService as unknown as OrdenesProduccionService,
     );
 
     itemsService.findOne.mockResolvedValue(ITEM_MOCK);
     operariosService.findOne.mockResolvedValue(OPERARIO_MOCK);
+    ordenesProduccionService.findOne.mockResolvedValue(ORDEN_MOCK);
     repository.create.mockResolvedValue(MOVIMIENTO_MOCK);
   });
 
@@ -127,5 +142,31 @@ describe('MovimientosService', () => {
     await service.create(buildDto());
 
     expect(operariosService.findOne).not.toHaveBeenCalled();
+  });
+
+  it('cuando se informa ordenProduccionId, deriva el operarioId de la orden y no valida operarioId aparte', async () => {
+    await service.create(
+      buildDto({ ordenProduccionId: 'orden-1', operarioId: 'operario-1' }),
+    );
+
+    expect(ordenesProduccionService.findOne).toHaveBeenCalledWith('orden-1');
+    expect(operariosService.findOne).not.toHaveBeenCalled();
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operario: { connect: { id: 'operario-de-la-orden' } },
+        ordenProduccion: { connect: { id: 'orden-1' } },
+      }),
+    );
+  });
+
+  it('lanza NotFoundException si la orden de producción no existe', async () => {
+    ordenesProduccionService.findOne.mockRejectedValue(
+      new NotFoundException('no existe'),
+    );
+
+    await expect(
+      service.create(buildDto({ ordenProduccionId: 'orden-x' })),
+    ).rejects.toThrow(NotFoundException);
+    expect(repository.create).not.toHaveBeenCalled();
   });
 });

@@ -24,6 +24,15 @@ export class CreateMovimientoDto {
   @IsUUID()
   operarioId?: string;
 
+  @ApiPropertyOptional({
+    example: '3f2a1b0c-...',
+    description:
+      'Opcional: si se informa, el movimiento queda agrupado a esa entrega/orden y el operarioId se toma de la orden (no hace falta repetirlo)',
+  })
+  @IsOptional()
+  @IsUUID()
+  ordenProduccionId?: string;
+
   @ApiProperty({ enum: MovimientoTipo })
   @IsEnum(MovimientoTipo)
   tipo!: MovimientoTipo;

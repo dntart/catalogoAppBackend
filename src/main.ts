@@ -21,6 +21,10 @@ async function bootstrap() {
     .addTag('auth', 'Login del dueño del emprendimiento')
     .addTag('items', 'Catálogo de materiales y productos')
     .addTag('operarios', 'Personas que registran movimientos')
+    .addTag(
+      'ordenes-produccion',
+      'Entregas de material a un operario y su trazabilidad',
+    )
     .addTag('movimientos', 'Ledger de entradas y salidas de stock')
     .addTag('stock', 'Stock calculado a partir de los movimientos')
     .build();

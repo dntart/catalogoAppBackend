@@ -12,7 +12,8 @@ Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y 
 2. [Arquitectura](#arquitectura)
 3. [Modelo de datos](#modelo-de-datos)
 4. [Motor de stock](#motor-de-stock)
-5. [Autenticación](#autenticación)
+5. [Trazabilidad: entrega de material → producto terminado](#trazabilidad-entrega-de-material--producto-terminado)
+6. [Autenticación](#autenticación)
 6. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
 7. [Variables de entorno](#variables-de-entorno)
 8. [Scripts disponibles](#scripts-disponibles)
@@ -106,7 +107,8 @@ Unique compuesto `(nombre, colorNombre)`.
 |---|---|---|
 | id | String (uuid) | |
 | itemId | String | FK a Item |
-| operarioId | String? | FK a Operario, opcional (una `COMPRA` a proveedor no siempre tiene un operario asociado) |
+| operarioId | String? | FK a Operario, opcional (una `COMPRA` a proveedor no siempre tiene un operario asociado). Si el movimiento pertenece a una `OrdenProduccion`, se autocompleta con el operario de esa orden |
+| ordenProduccionId | String? | FK a `OrdenProduccion`, opcional — agrupa la tela entregada (`CONSUMO`) y el producto devuelto (`PRODUCCION`) de una misma entrega |
 | tipo | MovimientoTipo | |
 | cantidad | Decimal(10,2) | positiva salvo en `AJUSTE` (ver más abajo) |
 | fecha | DateTime | default `now()`, puede informarse explícitamente |
@@ -124,6 +126,17 @@ El stock de un `Item` **nunca se persiste como columna**. Se calcula on-the-fly 
 Antes de crear un movimiento de `CONSUMO` o `VENTA`, `MovimientosService.create()` llama a `StockService.validarStockSuficiente(itemId, cantidad)`, que recalcula el stock actual y lanza `BadRequestException` si la operación lo dejaría negativo. No hay ningún endpoint `PATCH /stock` — la única forma de modificar stock es insertar un `Movimiento`.
 
 Los cálculos usan `Prisma.Decimal` en vez de `number` en los pasos intermedios para evitar errores de redondeo de punto flotante al sumar/restar cantidades.
+
+## Trazabilidad: entrega de material → producto terminado
+
+`OrdenProduccion` (`/ordenes-produccion`) agrupa una entrega puntual: "le doy tela a María" y, más tarde, "María me devuelve los muñecos terminados". Sin esto, un `CONSUMO` y una `PRODUCCION` son dos filas de ledger sin relación entre sí; con esto, se pueden agrupar bajo el mismo `ordenProduccionId`.
+
+- `POST /ordenes-produccion` — abre una orden para un `operarioId`.
+- `POST /movimientos` con `ordenProduccionId` — el `CONSUMO` (material que sale) y la `PRODUCCION` (producto que vuelve) quedan linkeados a esa orden. El `operarioId` **se autocompleta desde la orden**, no hace falta repetirlo.
+- `GET /ordenes-produccion/:id` — la orden con todos sus movimientos.
+- `GET /ordenes-produccion/:id/resumen` — total consumido/producido por item dentro de esa orden (agregado con `groupBy`, mismo patrón que `StockService`).
+
+No hay estados (abierta/cerrada) en esta versión — una orden queda simplemente disponible para seguir agregándole movimientos indefinidamente; si hace falta "cerrarla" más adelante es un campo fácil de sumar sin romper lo existente.
 
 ## Autenticación
 
@@ -213,8 +226,14 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 - `GET /operarios/:id`
 - `PATCH /operarios/:id`
 
+**Órdenes de producción** (`/ordenes-produccion`) — trazabilidad tela entregada → producto terminado
+- `POST /ordenes-produccion` — abre una orden para un `operarioId`
+- `GET /ordenes-produccion?operarioId=<uuid>`
+- `GET /ordenes-produccion/:id` — con sus movimientos
+- `GET /ordenes-produccion/:id/resumen` — totales por item
+
 **Movimientos** (`/movimientos`) — el único punto de entrada que afecta el stock
-- `POST /movimientos` — crea un movimiento (`CreateMovimientoDto`: `itemId`, `operarioId?`, `tipo`, `cantidad`, `fecha?`, `observaciones?`). Valida que el item (y el operario, si se informa) existan, que la cantidad tenga signo correcto según el tipo, y que no deje stock negativo en `CONSUMO`/`VENTA`.
+- `POST /movimientos` — crea un movimiento (`CreateMovimientoDto`: `itemId`, `operarioId?`, `ordenProduccionId?`, `tipo`, `cantidad`, `fecha?`, `observaciones?`). Valida que el item (y el operario u orden, si se informan) existan, que la cantidad tenga signo correcto según el tipo, y que no deje stock negativo en `CONSUMO`/`VENTA`.
 - `GET /movimientos?itemId=<uuid>` — listar, filtro opcional por item
 - `GET /movimientos/:id`
 
