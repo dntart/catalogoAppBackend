@@ -11,5 +11,6 @@ import { OrdenesProduccionModule } from '../ordenes-produccion/ordenes-produccio
   imports: [StockModule, ItemsModule, OperariosModule, OrdenesProduccionModule],
   controllers: [MovimientosController],
   providers: [MovimientosService, MovimientosRepository],
+  exports: [MovimientosService],
 })
 export class MovimientosModule {}

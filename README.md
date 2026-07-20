@@ -14,14 +14,15 @@ Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y 
 4. [Motor de stock](#motor-de-stock)
 5. [Trazabilidad: entrega de material → producto terminado](#trazabilidad-entrega-de-material--producto-terminado)
 6. [Autenticación](#autenticación)
-6. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
-7. [Variables de entorno](#variables-de-entorno)
-8. [Scripts disponibles](#scripts-disponibles)
-9. [API — endpoints](#api--endpoints)
-10. [Testing](#testing)
-11. [Troubleshooting](#troubleshooting)
-12. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
-13. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
+7. [Bot de WhatsApp](#bot-de-whatsapp)
+8. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
+9. [Variables de entorno](#variables-de-entorno)
+10. [Scripts disponibles](#scripts-disponibles)
+11. [API — endpoints](#api--endpoints)
+12. [Testing](#testing)
+13. [Troubleshooting](#troubleshooting)
+14. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
+15. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
 
 ---
 
@@ -33,6 +34,7 @@ Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y 
 - **class-validator** / **class-transformer** para DTOs
 - **@nestjs/swagger** para documentación OpenAPI interactiva (`/docs`)
 - **@nestjs/jwt** + **passport-jwt** + **bcrypt** para autenticación
+- **twilio** (SDK oficial) para el bot de WhatsApp
 - **Jest** para tests unitarios
 
 ## Arquitectura
@@ -153,6 +155,34 @@ Login vía JWT (`src/auth`):
 - El token se manda como header `Authorization: Bearer <token>`. En Swagger UI (`/docs`), el botón **Authorize** permite pegar el token una vez y que se use en todos los requests de prueba.
 - Las contraseñas se guardan hasheadas con `bcrypt` (`passwordHash`, nunca en texto plano). El primer usuario (el dueño) se crea vía seed, no vía un endpoint de registro — no existe `POST /users` público, a propósito: no hay un flujo de alta de usuarios auto-servicio en esta v1.
 
+## Bot de WhatsApp
+
+Pensado para que el dueño registre todo (compra de tela, entrega a una operaria, recepción de producto terminado, venta, ajuste, consulta de stock) charlando con un bot de WhatsApp, sin tocar la API ni el frontend. Es una interfaz conversacional sobre la misma lógica de negocio ya existente — no duplica reglas, llama a los mismos `Service` que usan el resto de los módulos.
+
+**Cómo está armado** (`src/whatsapp`):
+
+- `WhatsappController` (`POST /whatsapp/webhook`, `@Public()`) — recibe los mensajes entrantes que manda Twilio. Como el payload de Twilio trae ~20 campos que no controlamos, el body se lee como `Record<string, string>` en vez de un DTO con `class-validator`, para no chocar con `forbidNonWhitelisted` del `ValidationPipe` global.
+- **Autorización**: no usa JWT. Compara el campo `From` del mensaje contra `OWNER_WHATSAPP_NUMBER` del `.env` — cualquier otro número se ignora y se loguea como advertencia. Es el único mecanismo de acceso para esta v1 de un solo usuario; una versión multi-tenant necesitaría mapear cada número a una cuenta en vez de un único número fijo.
+- `ConversationService` (`src/whatsapp/conversation`) — el motor de la conversación: una máquina de estados simple (`FlowStep`) por número de teléfono. Cada paso muestra una lista numerada (materiales, operarios, órdenes abiertas, etc.), guarda en la sesión qué eligió el usuario, y en el último paso de cada flujo llama a `MovimientosService.create()`, `OrdenesProduccionService.create()` o `StockService.getResumen()` — los mismos services que usan el resto de los módulos.
+- `SessionStoreService` — guarda el estado de cada conversación en memoria (`Map<telefono, sesion>`). **Se pierde si el proceso se reinicia** (aceptable para esta v1; para producción real conviene pasar esto a Redis o una tabla). Escribir "menu" o "cancelar" en cualquier momento reinicia la conversación.
+- `WhatsappService` — wrapper fino sobre el SDK de Twilio para mandar la respuesta por la API REST (no se usa TwiML: el webhook siempre responde `200` vacío, y el mensaje se manda aparte).
+
+**Flujos disponibles**: Compra (item + cantidad → `COMPRA`), Entrega a operaria (operario + material + cantidad → abre una `OrdenProduccion` y crea el `CONSUMO` ya vinculado), Recepción de producto (operario + entrega abierta opcional + producto + cantidad → `PRODUCCION`, vinculada a la misma orden si corresponde), Venta (→ `VENTA`), Ajuste (→ `AJUSTE`, acepta cantidad negativa), Ver stock (→ `StockService.getResumen`, filtrable por categoría).
+
+### Probarlo con Twilio Sandbox (gratis, sin verificación de negocio)
+
+1. Entrá a la [consola de Twilio](https://console.twilio.com/) → **Messaging → Try it out → Send a WhatsApp message**, y desde tu WhatsApp real mandale al número del sandbox el código que te indican (algo como `join palabra-clave`). Quedás vinculado al sandbox.
+2. Copiá `Account SID` y `Auth Token` del dashboard de Twilio a tu `.env` (`TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`). `TWILIO_WHATSAPP_FROM` normalmente es `whatsapp:+14155238886` (el número compartido del sandbox).
+3. Poné tu propio número en `OWNER_WHATSAPP_NUMBER`, formato `whatsapp:+549...` (con `whatsapp:` adelante).
+4. Twilio necesita una URL pública para mandarte los mensajes — tu `localhost:3000` no le sirve. Exponelo con [ngrok](https://ngrok.com/) (o similar):
+   ```bash
+   ngrok http 3000
+   ```
+5. En la consola de Twilio, en la config del sandbox ("Sandbox settings"), pegá `https://<tu-url-de-ngrok>/whatsapp/webhook` como **"WHEN A MESSAGE COMES IN"** (método `POST`).
+6. Levantá el backend (`npm run start:dev`) y escribile "hola" al número del sandbox desde tu WhatsApp. Debería responderte el menú.
+
+> Nota: cada vez que reiniciás ngrok (versión gratuita) la URL cambia, así que hay que volver a pegarla en la consola de Twilio. Para no depender de esto en desarrollo, también podés probar el flujo sin WhatsApp real pegándole directo al webhook con `curl` (ver ejemplo en [Testing](#testing)).
+
 ## Puesta en marcha (proyecto ya clonado)
 
 Prerrequisitos: Node.js 20+, Docker Desktop con el motor corriendo (ver [Troubleshooting](#troubleshooting) si `docker info` falla).
@@ -188,6 +218,9 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 | `JWT_SECRET` | string aleatorio largo | firma los tokens (`src/auth`). Generar uno propio, nunca reusar el de ejemplo |
 | `JWT_EXPIRES_IN` | `7d` | opcional, vencimiento del token |
 | `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NOMBRE` | — | solo usados por `prisma/seed.ts` para crear la cuenta de login inicial del dueño; no se leen en runtime |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | — | credenciales de la [consola de Twilio](https://console.twilio.com/) |
+| `TWILIO_WHATSAPP_FROM` | `whatsapp:+14155238886` | número de origen; el del sandbox por default |
+| `OWNER_WHATSAPP_NUMBER` | `whatsapp:+549...` | único número autorizado a usar el bot (ver [Bot de WhatsApp](#bot-de-whatsapp)) |
 
 `.env` está en `.gitignore`; `.env.example` es la plantilla versionada.
 
@@ -238,9 +271,13 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 - `GET /movimientos/:id`
 
 **Stock** (`/stock`)
+- `GET /stock?categoria=MATERIAL|PRODUCTO` — resumen de stock de todos los items activos
 - `GET /stock/:itemId` — `{ itemId, stock }` calculado en el momento
 
-Todos los endpoints validan el body con `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })` (`src/main.ts`): cualquier campo no declarado en el DTO se rechaza con `400`.
+**WhatsApp** (`/whatsapp`) — no aparece en Swagger (`@ApiExcludeController`), no usa JWT
+- `POST /whatsapp/webhook` — público, pensado para que lo llame Twilio. Ver [Bot de WhatsApp](#bot-de-whatsapp)
+
+Todos los endpoints (salvo el webhook de WhatsApp, que no pasa por el `ValidationPipe`) validan el body con `ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true })` (`src/main.ts`): cualquier campo no declarado en el DTO se rechaza con `400`.
 
 ## Testing
 
@@ -250,10 +287,22 @@ Tests unitarios de los `Service` (la capa con la lógica de negocio), con el `Re
 - `movimientos/movimientos.service.spec.ts` — validación de item/operario, signo de cantidad por tipo, cuándo se llama a `validarStockSuficiente`
 - `items/items.service.spec.ts`, `operarios/operarios.service.spec.ts` — CRUD básico y manejo de `NotFoundException`
 - `auth/auth.service.spec.ts` — credenciales inválidas, usuario inactivo, y que `login` firme el payload correcto
+- `whatsapp/conversation/conversation.service.spec.ts` — el menú principal, el flujo completo de compra, entrega→recepción vinculadas a la misma orden, propagación de errores (ej. stock insuficiente) y selección inválida
 
 ```bash
 npm test
 ```
+
+Para probar el bot **sin** un WhatsApp real ni Twilio, se le puede pegar directo al webhook (mismo formato `x-www-form-urlencoded` que manda Twilio):
+
+```bash
+curl -X POST http://localhost:3000/whatsapp/webhook \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "From=$OWNER_WHATSAPP_NUMBER" \
+  --data-urlencode "Body=hola"
+```
+
+Como la respuesta se manda por la API de Twilio (no queda en el body del `curl`), para ver qué contestó el bot conviene revisar los logs del servidor, o directamente la tabla `movimientos`/`ordenes_produccion` después de completar un flujo.
 
 ## Troubleshooting
 
@@ -401,12 +450,27 @@ Piezas del módulo `auth` (ver [Autenticación](#autenticación) para el comport
 - El seed (`prisma/seed.ts`) crea la cuenta inicial leyendo `OWNER_EMAIL`/`OWNER_PASSWORD`/`OWNER_NOMBRE` de `.env` — nunca hardcodear credenciales reales en un archivo versionado.
 - `DocumentBuilder().addBearerAuth()` en `main.ts` + `@ApiBearerAuth()` en cada controller protegido para que el botón "Authorize" de Swagger UI funcione.
 
+### 12. Bot de WhatsApp
+
+```bash
+npm install twilio
+```
+
+Piezas de `src/whatsapp` (ver [Bot de WhatsApp](#bot-de-whatsapp) para el detalle):
+
+- `@Body() body: Record<string, string>` en vez de un DTO en el controller del webhook — Twilio manda ~20 campos que no controlamos, y un DTO con `forbidNonWhitelisted: true` rechazaría el request entero.
+- Autorización por número de teléfono (`OWNER_WHATSAPP_NUMBER`), no por JWT — el `@Public()` del guard global se usa para exceptuar esta ruta, igual que `/auth/login`.
+- Máquina de estados en memoria (`SessionStoreService`) para trackear en qué paso de la conversación está cada número — WhatsApp no tiene sesión, cada mensaje es un webhook independiente.
+- `ConversationService` llama directo a los `Service` de negocio ya existentes (`MovimientosService`, `OrdenesProduccionService`, `StockService`, ...) — la capa conversacional no reimplementa ninguna regla, solo la envuelve en preguntas/respuestas de texto.
+- El envío de la respuesta es una llamada aparte a la API REST de Twilio (`client.messages.create`), envuelta en `try/catch` para que un fallo de Twilio no tire un 500 al webhook.
+
 ## Cómo adaptar esta base a otro negocio
 
 Este proyecto está armado para ser un punto de partida reusable. Para clonarlo a otro rubro (por ejemplo, otro tipo de manufactura o un comercio con insumos/productos):
 
 1. **Renombrar el dominio de "persona que mueve stock"** si `Operario` no encaja (ej. `Vendedor`, `Encargado`): renombrar modelo en `schema.prisma`, correr `prisma migrate dev`, y renombrar el módulo (`grep -rl "Operario\|operario" src` para ubicar todos los puntos).
 2. **Ajustar `Categoria`, `Unidad` y `MovimientoTipo`** en el enum de `schema.prisma` según el negocio — son la única parte realmente específica de "muñecos de tela". El resto (Controller/Service/Repository, motor de stock, validaciones) es genérico.
-3. **Revisar las listas `TIPOS_ENTRADA` / `TIPOS_SALIDA`** en `src/stock/stock.service.ts` y `TIPOS_SALIDA` en `src/movimientos/movimientos.service.ts` si se agregan o quitan tipos de movimiento — son la única fuente de verdad sobre qué tipo suma y qué tipo resta.
+3. **Revisar la lista `TIPOS_SALIDA`** en `src/stock/stock.service.ts` y `src/movimientos/movimientos.service.ts` si se agregan o quitan tipos de movimiento — es la fuente de verdad sobre qué tipo resta (todo lo que no es `TIPOS_SALIDA` ni `AJUSTE` suma).
 4. **Reemplazar `prisma/seed.ts`** por el catálogo real del nuevo negocio, manteniendo el patrón `upsertItem`/`upsert<Entidad>` idempotente.
+5. **Multi-tenant (vender esto a otros emprendedores)**: hoy todo el sistema asume un solo negocio — `OWNER_WHATSAPP_NUMBER` es un único número fijo en `.env`. Para SaaS real hace falta un modelo `Negocio`/`Cuenta` que scopee `Item`/`Operario`/`Movimiento`/`OrdenProduccion`, y reemplazar el check de número fijo por una tabla que mapee cada número de WhatsApp a su negocio. Es un cambio de fondo, no incremental — mejor encararlo como su propio sprint una vez validado el flujo de un solo negocio.
 5. **`docker-compose.yml` y `.env`**: cambiar `POSTGRES_DB`, nombre del contenedor y del volumen para que convivan varios proyectos de este tipo en la misma máquina sin pisarse.

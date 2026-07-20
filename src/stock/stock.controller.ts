@@ -1,18 +1,32 @@
-import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Categoria } from '@prisma/client';
 import { StockService } from './stock.service';
 import { StockResponseEntity } from './entities/stock-response.entity';
+import { ResumenStockItemEntity } from './entities/resumen-stock-item.entity';
 
 @ApiTags('stock')
 @ApiBearerAuth()
 @Controller('stock')
 export class StockController {
   constructor(private readonly stockService: StockService) {}
+
+  @Get()
+  @ApiOperation({
+    summary:
+      'Resumen de stock de todos los items activos, con filtro opcional por categoría',
+  })
+  @ApiResponse({ status: 200, type: [ResumenStockItemEntity] })
+  getResumen(
+    @Query('categoria') categoria?: Categoria,
+  ): Promise<ResumenStockItemEntity[]> {
+    return this.stockService.getResumen(categoria);
+  }
 
   @Get(':itemId')
   @ApiOperation({

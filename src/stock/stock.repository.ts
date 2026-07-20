@@ -12,4 +12,11 @@ export class StockRepository {
       _sum: { cantidad: true },
     });
   }
+
+  sumarCantidadesPorItemGlobal() {
+    return this.prisma.movimiento.groupBy({
+      by: ['itemId', 'tipo'],
+      _sum: { cantidad: true },
+    });
+  }
 }

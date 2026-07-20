@@ -12,6 +12,7 @@ import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { OrdenesProduccionModule } from './ordenes-produccion/ordenes-produccion.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { OrdenesProduccionModule } from './ordenes-produccion/ordenes-produccion
     OrdenesProduccionModule,
     MovimientosModule,
     StockModule,
+    WhatsappModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: JwtAuthGuard }],

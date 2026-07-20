@@ -1,15 +1,48 @@
 import { BadRequestException } from '@nestjs/common';
-import { MovimientoTipo, Prisma } from '@prisma/client';
+import {
+  Categoria,
+  Item,
+  MovimientoTipo,
+  Prisma,
+  Unidad,
+} from '@prisma/client';
 import { StockService } from './stock.service';
 import { StockRepository } from './stock.repository';
+import { ItemsService } from '../items/items.service';
+
+const ITEM_GABARDINA = {
+  id: 'item-1',
+  nombre: 'Gabardina',
+  colorNombre: 'Beige',
+  categoria: Categoria.MATERIAL,
+  unidad: Unidad.METRO,
+} as Item;
+const ITEM_ZORRO = {
+  id: 'item-2',
+  nombre: 'Zorro',
+  colorNombre: null,
+  categoria: Categoria.PRODUCTO,
+  unidad: Unidad.UNIDAD,
+} as Item;
 
 describe('StockService', () => {
   let service: StockService;
-  let repository: { sumarCantidadesPorTipo: jest.Mock };
+  let repository: {
+    sumarCantidadesPorTipo: jest.Mock;
+    sumarCantidadesPorItemGlobal: jest.Mock;
+  };
+  let itemsService: { findAll: jest.Mock };
 
   beforeEach(() => {
-    repository = { sumarCantidadesPorTipo: jest.fn() };
-    service = new StockService(repository as unknown as StockRepository);
+    repository = {
+      sumarCantidadesPorTipo: jest.fn(),
+      sumarCantidadesPorItemGlobal: jest.fn(),
+    };
+    itemsService = { findAll: jest.fn() };
+    service = new StockService(
+      repository as unknown as StockRepository,
+      itemsService as unknown as ItemsService,
+    );
   });
 
   describe('getStock', () => {
@@ -91,6 +124,65 @@ describe('StockService', () => {
       await expect(service.validarStockSuficiente('item-1', 6)).rejects.toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  describe('getResumen', () => {
+    it('calcula el stock de cada item activo, con nombre+color combinados', async () => {
+      itemsService.findAll.mockResolvedValue([ITEM_GABARDINA, ITEM_ZORRO]);
+      repository.sumarCantidadesPorItemGlobal.mockResolvedValue([
+        {
+          itemId: 'item-1',
+          tipo: MovimientoTipo.COMPRA,
+          _sum: { cantidad: new Prisma.Decimal(20) },
+        },
+        {
+          itemId: 'item-1',
+          tipo: MovimientoTipo.CONSUMO,
+          _sum: { cantidad: new Prisma.Decimal(5) },
+        },
+        {
+          itemId: 'item-2',
+          tipo: MovimientoTipo.PRODUCCION,
+          _sum: { cantidad: new Prisma.Decimal(3) },
+        },
+      ]);
+
+      const resumen = await service.getResumen();
+
+      expect(resumen).toEqual([
+        {
+          itemId: 'item-1',
+          nombre: 'Gabardina Beige',
+          categoria: Categoria.MATERIAL,
+          unidad: Unidad.METRO,
+          stock: 15,
+        },
+        {
+          itemId: 'item-2',
+          nombre: 'Zorro',
+          categoria: Categoria.PRODUCTO,
+          unidad: Unidad.UNIDAD,
+          stock: 3,
+        },
+      ]);
+    });
+
+    it('filtra por categoria cuando se informa', async () => {
+      itemsService.findAll.mockResolvedValue([ITEM_GABARDINA, ITEM_ZORRO]);
+      repository.sumarCantidadesPorItemGlobal.mockResolvedValue([]);
+
+      const resumen = await service.getResumen(Categoria.PRODUCTO);
+
+      expect(resumen).toEqual([
+        {
+          itemId: 'item-2',
+          nombre: 'Zorro',
+          categoria: Categoria.PRODUCTO,
+          unidad: Unidad.UNIDAD,
+          stock: 0,
+        },
+      ]);
     });
   });
 });
