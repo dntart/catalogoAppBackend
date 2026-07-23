@@ -1,3 +1,5 @@
+import { Categoria, Unidad } from '@prisma/client';
+
 export enum FlowStep {
   MENU = 'MENU',
   COMPRA_ITEM = 'COMPRA_ITEM',
@@ -14,6 +16,12 @@ export enum FlowStep {
   AJUSTE_ITEM = 'AJUSTE_ITEM',
   AJUSTE_CANTIDAD = 'AJUSTE_CANTIDAD',
   STOCK_CATEGORIA = 'STOCK_CATEGORIA',
+  NUEVA_OPERARIA_NOMBRE = 'NUEVA_OPERARIA_NOMBRE',
+  NUEVO_ITEM_CATEGORIA = 'NUEVO_ITEM_CATEGORIA',
+  NUEVO_ITEM_UNIDAD = 'NUEVO_ITEM_UNIDAD',
+  NUEVO_ITEM_NOMBRE = 'NUEVO_ITEM_NOMBRE',
+  NUEVO_ITEM_TIENE_COLOR = 'NUEVO_ITEM_TIENE_COLOR',
+  NUEVO_ITEM_COLOR = 'NUEVO_ITEM_COLOR',
 }
 
 export interface OpcionListado {
@@ -27,6 +35,9 @@ export interface WhatsappSession {
   itemId?: string;
   operarioId?: string;
   ordenProduccionId?: string | null;
+  nuevoItemCategoria?: Categoria;
+  nuevoItemUnidad?: Unidad;
+  nuevoItemNombre?: string;
 }
 
 export function nuevaSesion(): WhatsappSession {

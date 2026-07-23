@@ -43,8 +43,16 @@ const MARIA = {
 
 describe('ConversationService', () => {
   let service: ConversationService;
-  let itemsService: { findAll: jest.Mock; findOne: jest.Mock };
-  let operariosService: { findAll: jest.Mock; findOne: jest.Mock };
+  let itemsService: {
+    findAll: jest.Mock;
+    findOne: jest.Mock;
+    create: jest.Mock;
+  };
+  let operariosService: {
+    findAll: jest.Mock;
+    findOne: jest.Mock;
+    create: jest.Mock;
+  };
   let movimientosService: { create: jest.Mock };
   let ordenesProduccionService: { create: jest.Mock; findAll: jest.Mock };
   let stockService: { getStock: jest.Mock; getResumen: jest.Mock };
@@ -53,6 +61,7 @@ describe('ConversationService', () => {
     itemsService = {
       findAll: jest.fn().mockResolvedValue([GABARDINA, ZORRO]),
       findOne: jest.fn(),
+      create: jest.fn(),
     };
     itemsService.findOne.mockImplementation((id: string) =>
       Promise.resolve([GABARDINA, ZORRO].find((item) => item.id === id)),
@@ -60,6 +69,7 @@ describe('ConversationService', () => {
     operariosService = {
       findAll: jest.fn().mockResolvedValue([MARIA]),
       findOne: jest.fn().mockResolvedValue(MARIA),
+      create: jest.fn(),
     };
     movimientosService = {
       create: jest.fn().mockResolvedValue({ id: 'mov-1' }),
@@ -191,5 +201,75 @@ describe('ConversationService', () => {
     const respuesta = await service.manejarMensaje(TELEFONO, 'menu');
 
     expect(respuesta).toContain('Fauna de Tela');
+  });
+
+  it('flujo agregar operaria: pide el nombre y la crea', async () => {
+    operariosService.create.mockResolvedValue({
+      id: 'operario-lujan',
+      nombre: 'Luján',
+    });
+
+    await service.manejarMensaje(TELEFONO, 'menu');
+    const pideNombre = await service.manejarMensaje(TELEFONO, '7');
+    expect(pideNombre).toContain('¿Cómo se llama');
+
+    const confirmacion = await service.manejarMensaje(TELEFONO, 'Luján');
+
+    expect(operariosService.create).toHaveBeenCalledWith({ nombre: 'Luján' });
+    expect(confirmacion).toContain('Operaria agregada');
+    expect(confirmacion).toContain('Luján');
+  });
+
+  it('flujo agregar item sin color: pide categoria, unidad, nombre y crea el item', async () => {
+    itemsService.create.mockResolvedValue({
+      id: 'item-vellon',
+      nombre: 'Vellón',
+      colorNombre: null,
+      unidad: Unidad.KG,
+    });
+
+    await service.manejarMensaje(TELEFONO, 'menu');
+    await service.manejarMensaje(TELEFONO, '8'); // agregar item
+    await service.manejarMensaje(TELEFONO, '1'); // material
+    await service.manejarMensaje(TELEFONO, '2'); // unidad: Kg
+    await service.manejarMensaje(TELEFONO, 'Vellón'); // nombre
+    const confirmacion = await service.manejarMensaje(TELEFONO, 'no'); // sin color
+
+    expect(itemsService.create).toHaveBeenCalledWith({
+      nombre: 'Vellón',
+      categoria: Categoria.MATERIAL,
+      unidad: Unidad.KG,
+      tieneColor: false,
+      colorNombre: undefined,
+    });
+    expect(confirmacion).toContain('Item agregado');
+  });
+
+  it('flujo agregar item con color: pide el color antes de crear', async () => {
+    itemsService.create.mockResolvedValue({
+      id: 'item-pana',
+      nombre: 'Pana',
+      colorNombre: 'Negro',
+      unidad: Unidad.METRO,
+    });
+
+    await service.manejarMensaje(TELEFONO, 'menu');
+    await service.manejarMensaje(TELEFONO, '8');
+    await service.manejarMensaje(TELEFONO, '1'); // material
+    await service.manejarMensaje(TELEFONO, '1'); // unidad: Metro
+    await service.manejarMensaje(TELEFONO, 'Pana'); // nombre
+    const pideColor = await service.manejarMensaje(TELEFONO, 'si');
+    expect(pideColor).toContain('color');
+
+    const confirmacion = await service.manejarMensaje(TELEFONO, 'Negro');
+
+    expect(itemsService.create).toHaveBeenCalledWith({
+      nombre: 'Pana',
+      categoria: Categoria.MATERIAL,
+      unidad: Unidad.METRO,
+      tieneColor: true,
+      colorNombre: 'Negro',
+    });
+    expect(confirmacion).toContain('Item agregado');
   });
 });

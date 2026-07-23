@@ -167,7 +167,7 @@ Pensado para que el dueño registre todo (compra de tela, entrega a una operaria
 - `SessionStoreService` — guarda el estado de cada conversación en memoria (`Map<telefono, sesion>`). **Se pierde si el proceso se reinicia** (aceptable para esta v1; para producción real conviene pasar esto a Redis o una tabla). Escribir "menu" o "cancelar" en cualquier momento reinicia la conversación.
 - `WhatsappService` — wrapper fino sobre el SDK de Twilio para mandar la respuesta por la API REST (no se usa TwiML: el webhook siempre responde `200` vacío, y el mensaje se manda aparte).
 
-**Flujos disponibles**: Compra (item + cantidad → `COMPRA`), Entrega a operaria (operario + material + cantidad → abre una `OrdenProduccion` y crea el `CONSUMO` ya vinculado), Recepción de producto (operario + entrega abierta opcional + producto + cantidad → `PRODUCCION`, vinculada a la misma orden si corresponde), Venta (→ `VENTA`), Ajuste (→ `AJUSTE`, acepta cantidad negativa), Ver stock (→ `StockService.getResumen`, filtrable por categoría).
+**Flujos disponibles**: Compra (item + cantidad → `COMPRA`), Entrega a operaria (operario + material + cantidad → abre una `OrdenProduccion` y crea el `CONSUMO` ya vinculado), Recepción de producto (operario + entrega abierta opcional + producto + cantidad → `PRODUCCION`, vinculada a la misma orden si corresponde), Venta (→ `VENTA`), Ajuste (→ `AJUSTE`, acepta cantidad negativa), Ver stock (→ `StockService.getResumen`, filtrable por categoría), Agregar operaria nueva (→ `OperariosService.create`), Agregar material/producto nuevo (categoría, unidad, nombre y color opcional → `ItemsService.create`) — estos dos últimos son altas de catálogo, no movimientos.
 
 ### Probarlo con Twilio Sandbox (gratis, sin verificación de negocio)
 
