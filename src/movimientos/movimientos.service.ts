@@ -4,7 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Movimiento, MovimientoTipo } from '@prisma/client';
-import { MovimientosRepository } from './movimientos.repository';
+import {
+  MovimientosRepository,
+  MovimientoConRelaciones,
+} from './movimientos.repository';
 import { CreateMovimientoDto } from './dto/create-movimiento.dto';
 import { StockService } from '../stock/stock.service';
 import { ItemsService } from '../items/items.service';
@@ -62,11 +65,11 @@ export class MovimientosService {
     });
   }
 
-  findAll(itemId?: string): Promise<Movimiento[]> {
+  findAll(itemId?: string): Promise<MovimientoConRelaciones[]> {
     return this.movimientosRepository.findAll(itemId ? { itemId } : undefined);
   }
 
-  async findOne(id: string): Promise<Movimiento> {
+  async findOne(id: string): Promise<MovimientoConRelaciones> {
     const movimiento = await this.movimientosRepository.findById(id);
     if (!movimiento) {
       throw new NotFoundException(`Movimiento ${id} no encontrado`);

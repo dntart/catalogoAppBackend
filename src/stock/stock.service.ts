@@ -55,8 +55,12 @@ export class StockService {
     const stockResultante = stockActual.minus(cantidad);
 
     if (stockResultante.isNegative()) {
+      const item = await this.itemsService.findOne(itemId);
+      const nombre = item.colorNombre
+        ? `${item.nombre} ${item.colorNombre}`
+        : item.nombre;
       throw new BadRequestException(
-        `Stock insuficiente para el item ${itemId}: stock actual ${stockActual.toString()}, solicitado ${cantidad}`,
+        `Stock insuficiente de ${nombre}: stock actual ${stockActual.toString()}, solicitado ${cantidad}`,
       );
     }
   }

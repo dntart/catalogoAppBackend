@@ -3,9 +3,21 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Categoria, Item, MovimientoTipo, Unidad } from '@prisma/client';
+import {
+  Categoria,
+  Item,
+  MovimientoTipo,
+  OrdenProduccion,
+  Unidad,
+} from '@prisma/client';
 import { SessionStoreService } from './session-store.service';
-import { FlowStep, OpcionListado, WhatsappSession } from './types';
+import {
+  AccionMovimientoPendiente,
+  AccionPendiente,
+  FlowStep,
+  OpcionListado,
+  WhatsappSession,
+} from './types';
 import { ItemsService } from '../../items/items.service';
 import { OperariosService } from '../../operarios/operarios.service';
 import { MovimientosService } from '../../movimientos/movimientos.service';
@@ -24,8 +36,9 @@ const MENSAJE_MENU = [
   '6️⃣ Ver stock',
   '7️⃣ Agregar operaria nueva',
   '8️⃣ Agregar material o producto nuevo',
+  '9️⃣ Ver últimos movimientos',
   '',
-  '_En cualquier momento escribí "menu" para volver acá._',
+  '_Escribí "0" o "menu" en cualquier momento para volver acá._',
 ].join('\n');
 
 const UNIDADES: { opcion: string; valor: Unidad; etiqueta: string }[] = [
@@ -34,6 +47,11 @@ const UNIDADES: { opcion: string; valor: Unidad; etiqueta: string }[] = [
   { opcion: '3', valor: Unidad.CONO, etiqueta: 'Cono' },
   { opcion: '4', valor: Unidad.UNIDAD, etiqueta: 'Unidad' },
 ];
+
+const SIGNO_POR_TIPO: Partial<Record<MovimientoTipo, string>> = {
+  [MovimientoTipo.CONSUMO]: '-',
+  [MovimientoTipo.VENTA]: '-',
+};
 
 function etiquetaItem(item: Item): string {
   const nombre = item.colorNombre
@@ -63,6 +81,13 @@ function parseCantidad(texto: string): number | null {
   return Number.isFinite(numero) && numero !== 0 ? numero : null;
 }
 
+function normalizarSiNo(texto: string): boolean | null {
+  const t = texto.trim().toLowerCase();
+  if (t === 'si' || t === 'sí') return true;
+  if (t === 'no') return false;
+  return null;
+}
+
 @Injectable()
 export class ConversationService {
   constructor(
@@ -81,7 +106,12 @@ export class ConversationService {
     const texto = textoOriginal.trim();
     const comando = texto.toLowerCase();
 
-    if (comando === 'menu' || comando === 'cancelar' || comando === 'hola') {
+    if (
+      comando === 'menu' ||
+      comando === 'cancelar' ||
+      comando === 'hola' ||
+      comando === '0'
+    ) {
       this.sessionStore.reiniciar(telefono);
       return MENSAJE_MENU;
     }
@@ -92,61 +122,34 @@ export class ConversationService {
       switch (session.step) {
         case FlowStep.MENU:
           return await this.manejarMenu(telefono, texto, session);
-        case FlowStep.COMPRA_ITEM:
-          return this.manejarSeleccionCantidadPendiente(
-            session,
-            texto,
-            FlowStep.COMPRA_CANTIDAD,
+        case FlowStep.SELECCION_ITEM_NOMBRE:
+          return await this.manejarSeleccionItemNombre(
             telefono,
+            texto,
+            session,
           );
+        case FlowStep.SELECCION_ITEM_COLOR:
+          return this.manejarSeleccionItemColor(telefono, texto, session);
         case FlowStep.COMPRA_CANTIDAD:
-          return await this.finalizarCompra(telefono, texto, session);
+          return await this.prepararCompra(telefono, texto, session);
         case FlowStep.ENTREGA_OPERARIO:
           return await this.manejarEntregaOperario(telefono, texto, session);
-        case FlowStep.ENTREGA_ITEM:
-          return this.manejarSeleccionCantidadPendiente(
-            session,
-            texto,
-            FlowStep.ENTREGA_CANTIDAD,
-            telefono,
-          );
         case FlowStep.ENTREGA_CANTIDAD:
-          return await this.finalizarEntrega(telefono, texto, session);
+          return await this.prepararEntrega(telefono, texto, session);
         case FlowStep.RECEPCION_OPERARIO:
           return await this.manejarRecepcionOperario(telefono, texto, session);
         case FlowStep.RECEPCION_ORDEN:
-          return this.manejarRecepcionOrden(telefono, texto, session);
-        case FlowStep.RECEPCION_ITEM:
-          return this.manejarSeleccionCantidadPendiente(
-            session,
-            texto,
-            FlowStep.RECEPCION_CANTIDAD,
-            telefono,
-          );
+          return await this.manejarRecepcionOrden(telefono, texto, session);
         case FlowStep.RECEPCION_CANTIDAD:
-          return await this.finalizarRecepcion(telefono, texto, session);
-        case FlowStep.VENTA_ITEM:
-          return this.manejarSeleccionCantidadPendiente(
-            session,
-            texto,
-            FlowStep.VENTA_CANTIDAD,
-            telefono,
-          );
+          return await this.prepararRecepcion(telefono, texto, session);
         case FlowStep.VENTA_CANTIDAD:
-          return await this.finalizarVenta(telefono, texto, session);
-        case FlowStep.AJUSTE_ITEM:
-          return this.manejarSeleccionCantidadPendiente(
-            session,
-            texto,
-            FlowStep.AJUSTE_CANTIDAD,
-            telefono,
-          );
+          return await this.prepararVenta(telefono, texto, session);
         case FlowStep.AJUSTE_CANTIDAD:
-          return await this.finalizarAjuste(telefono, texto, session);
+          return await this.prepararAjuste(telefono, texto, session);
         case FlowStep.STOCK_CATEGORIA:
           return await this.finalizarStock(telefono, texto);
         case FlowStep.NUEVA_OPERARIA_NOMBRE:
-          return await this.finalizarNuevaOperaria(telefono, texto);
+          return this.prepararNuevaOperaria(telefono, texto, session);
         case FlowStep.NUEVO_ITEM_CATEGORIA:
           return this.manejarNuevoItemCategoria(telefono, texto, session);
         case FlowStep.NUEVO_ITEM_UNIDAD:
@@ -154,17 +157,11 @@ export class ConversationService {
         case FlowStep.NUEVO_ITEM_NOMBRE:
           return this.manejarNuevoItemNombre(telefono, texto, session);
         case FlowStep.NUEVO_ITEM_TIENE_COLOR:
-          return await this.manejarNuevoItemTieneColor(
-            telefono,
-            texto,
-            session,
-          );
+          return this.manejarNuevoItemTieneColor(telefono, texto, session);
         case FlowStep.NUEVO_ITEM_COLOR:
-          return await this.finalizarNuevoItemConColor(
-            telefono,
-            texto,
-            session,
-          );
+          return this.prepararNuevoItemConColor(telefono, texto, session);
+        case FlowStep.CONFIRMAR:
+          return await this.manejarConfirmacion(telefono, texto, session);
         default:
           this.sessionStore.reiniciar(telefono);
           return MENSAJE_MENU;
@@ -196,7 +193,7 @@ export class ConversationService {
         return this.pedirItem(
           session,
           Categoria.MATERIAL,
-          FlowStep.COMPRA_ITEM,
+          FlowStep.COMPRA_CANTIDAD,
           '¿Qué material compraste?',
         );
       case '2':
@@ -215,14 +212,14 @@ export class ConversationService {
         return this.pedirItem(
           session,
           Categoria.PRODUCTO,
-          FlowStep.VENTA_ITEM,
+          FlowStep.VENTA_CANTIDAD,
           '¿Qué producto vendiste?',
         );
       case '5':
         return this.pedirItem(
           session,
           undefined,
-          FlowStep.AJUSTE_ITEM,
+          FlowStep.AJUSTE_CANTIDAD,
           '¿Qué item querés ajustar?',
         );
       case '6': {
@@ -243,6 +240,8 @@ export class ConversationService {
         this.sessionStore.guardar(telefono, session);
         return '¿Es un material o un producto?\n1. Material\n2. Producto';
       }
+      case '9':
+        return this.mostrarUltimosMovimientos(telefono);
       default:
         return `No entendí esa opción.\n\n${MENSAJE_MENU}`;
     }
@@ -258,15 +257,77 @@ export class ConversationService {
     const filtrados = categoria
       ? items.filter((item) => item.categoria === categoria)
       : items;
-    const opciones: OpcionListado[] = filtrados.map((item) => ({
-      id: item.id,
-      etiqueta: etiquetaItem(item),
+
+    if (filtrados.length === 0) {
+      session.step = FlowStep.MENU;
+      session.opciones = [];
+      return `No hay items cargados en esa categoría todavía.\n\n${MENSAJE_MENU}`;
+    }
+
+    const nombresUnicos = [
+      ...new Set(filtrados.map((item) => item.nombre)),
+    ].sort();
+
+    session.contextoItem = { categoria, siguienteStep };
+    session.step = FlowStep.SELECCION_ITEM_NOMBRE;
+    session.opciones = nombresUnicos.map((nombre) => ({
+      id: nombre,
+      etiqueta: nombre,
     }));
 
-    session.step = siguienteStep;
-    session.opciones = opciones;
+    return `${pregunta}\n${construirListado(session.opciones)}`;
+  }
 
-    return `${pregunta}\n${construirListado(opciones)}`;
+  private async manejarSeleccionItemNombre(
+    telefono: string,
+    texto: string,
+    session: WhatsappSession,
+  ): Promise<string> {
+    const seleccion = parseSeleccion(texto, session.opciones);
+    if (!seleccion) {
+      return `No entendí esa opción, respondé con el número de la lista.\n${construirListado(session.opciones)}`;
+    }
+
+    const contexto = session.contextoItem!;
+    const items = await this.itemsService.findAll(true);
+    const coincidencias = items.filter(
+      (item) =>
+        item.nombre === seleccion.etiqueta &&
+        (!contexto.categoria || item.categoria === contexto.categoria),
+    );
+
+    if (coincidencias.length <= 1) {
+      session.itemId = coincidencias[0]?.id;
+      session.step = contexto.siguienteStep;
+      this.sessionStore.guardar(telefono, session);
+      return '¿Cuánta cantidad? (podés escribir con decimales, ej: 5.5)';
+    }
+
+    session.step = FlowStep.SELECCION_ITEM_COLOR;
+    session.opciones = coincidencias.map((item) => ({
+      id: item.id,
+      etiqueta: item.colorNombre ?? item.nombre,
+    }));
+    this.sessionStore.guardar(telefono, session);
+
+    return `¿De qué color?\n${construirListado(session.opciones)}`;
+  }
+
+  private manejarSeleccionItemColor(
+    telefono: string,
+    texto: string,
+    session: WhatsappSession,
+  ): string {
+    const seleccion = parseSeleccion(texto, session.opciones);
+    if (!seleccion || !seleccion.id) {
+      return `No entendí esa opción, respondé con el número de la lista.\n${construirListado(session.opciones)}`;
+    }
+
+    session.itemId = seleccion.id;
+    session.step = session.contextoItem!.siguienteStep;
+    this.sessionStore.guardar(telefono, session);
+
+    return '¿Cuánta cantidad? (podés escribir con decimales, ej: 5.5)';
   }
 
   private async pedirOperario(
@@ -286,25 +347,21 @@ export class ConversationService {
     return `${pregunta}\n${construirListado(opciones)}`;
   }
 
-  private manejarSeleccionCantidadPendiente(
-    session: WhatsappSession,
-    texto: string,
-    siguienteStep: FlowStep,
+  private pedirConfirmacion(
     telefono: string,
+    session: WhatsappSession,
+    accion: AccionPendiente,
+    resumen: string,
   ): string {
-    const seleccion = parseSeleccion(texto, session.opciones);
-    if (!seleccion || !seleccion.id) {
-      return `No entendí esa opción, respondé con el número de la lista.\n${construirListado(session.opciones)}`;
-    }
-
-    session.itemId = seleccion.id;
-    session.step = siguienteStep;
+    session.accionPendiente = accion;
+    session.step = FlowStep.CONFIRMAR;
+    session.opciones = [];
     this.sessionStore.guardar(telefono, session);
 
-    return `¿Cuánta cantidad? (podés escribir con decimales, ej: 5.5)`;
+    return `${resumen}\n¿Confirmás? Respondé *sí* o *no*.`;
   }
 
-  private async finalizarCompra(
+  private async prepararCompra(
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -315,15 +372,16 @@ export class ConversationService {
     }
 
     const item = await this.itemsService.findOne(session.itemId!);
-    await this.movimientosService.create({
-      itemId: item.id,
-      tipo: MovimientoTipo.COMPRA,
-      cantidad,
-    });
-    const stock = await this.stockService.getStock(item.id);
-
-    this.sessionStore.reiniciar(telefono);
-    return `✅ Compra registrada: ${cantidad} de ${etiquetaItem(item)}.\nStock actual: ${stock}\n\n${MENSAJE_MENU}`;
+    return this.pedirConfirmacion(
+      telefono,
+      session,
+      {
+        tipoAccion: 'MOVIMIENTO',
+        payload: { itemId: item.id, tipo: MovimientoTipo.COMPRA, cantidad },
+        etiquetaItem: etiquetaItem(item),
+      },
+      `Vas a registrar una *compra* de ${cantidad} de ${etiquetaItem(item)}.`,
+    );
   }
 
   private async manejarEntregaOperario(
@@ -340,12 +398,12 @@ export class ConversationService {
     return this.pedirItem(
       session,
       Categoria.MATERIAL,
-      FlowStep.ENTREGA_ITEM,
+      FlowStep.ENTREGA_CANTIDAD,
       '¿Qué material le entregás?',
     );
   }
 
-  private async finalizarEntrega(
+  private async prepararEntrega(
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -357,23 +415,18 @@ export class ConversationService {
 
     const item = await this.itemsService.findOne(session.itemId!);
     const operario = await this.operariosService.findOne(session.operarioId!);
-    const orden = await this.ordenesProduccionService.create({
-      operarioId: operario.id,
-      observaciones: 'Entrega registrada por WhatsApp',
-    });
-    await this.movimientosService.create({
-      itemId: item.id,
-      tipo: MovimientoTipo.CONSUMO,
-      cantidad,
-      ordenProduccionId: orden.id,
-    });
-    const stock = await this.stockService.getStock(item.id);
 
-    this.sessionStore.reiniciar(telefono);
-    return (
-      `✅ Entrega registrada: ${cantidad} de ${etiquetaItem(item)} para ${operario.nombre}.\n` +
-      `Stock actual: ${stock}\n` +
-      `Cuando te traiga el producto terminado, elegí la opción 3 del menú y vas a poder vincularlo a esta misma entrega.\n\n${MENSAJE_MENU}`
+    return this.pedirConfirmacion(
+      telefono,
+      session,
+      {
+        tipoAccion: 'MOVIMIENTO',
+        payload: { itemId: item.id, tipo: MovimientoTipo.CONSUMO, cantidad },
+        etiquetaItem: etiquetaItem(item),
+        crearOrdenParaOperario: operario.id,
+        mensajeExtra: `\nCuando ${operario.nombre} te traiga el producto terminado, elegí la opción 3 del menú y vas a poder vincularlo a esta misma entrega.`,
+      },
+      `Vas a registrar una *entrega* de ${cantidad} de ${etiquetaItem(item)} para ${operario.nombre}.`,
     );
   }
 
@@ -394,16 +447,20 @@ export class ConversationService {
       return this.pedirItem(
         session,
         Categoria.PRODUCTO,
-        FlowStep.RECEPCION_ITEM,
+        FlowStep.RECEPCION_CANTIDAD,
         '¿Qué producto terminado trae?',
       );
     }
 
+    const ordenesRecientes = ordenes.slice(0, 5);
+    const etiquetas = await Promise.all(
+      ordenesRecientes.map((orden) => this.etiquetaOrden(orden)),
+    );
     const opciones: OpcionListado[] = [
       { id: null, etiqueta: 'Sin vincular a ninguna entrega' },
-      ...ordenes.slice(0, 5).map((orden) => ({
+      ...ordenesRecientes.map((orden, i) => ({
         id: orden.id,
-        etiqueta: `Entrega del ${new Date(orden.fecha).toLocaleDateString()}${orden.observaciones ? ` — ${orden.observaciones}` : ''}`,
+        etiqueta: etiquetas[i],
       })),
     ];
     session.step = FlowStep.RECEPCION_ORDEN;
@@ -413,11 +470,31 @@ export class ConversationService {
     return `¿A qué entrega corresponde este producto?\n${construirListado(opciones)}`;
   }
 
-  private manejarRecepcionOrden(
+  private async etiquetaOrden(orden: OrdenProduccion): Promise<string> {
+    const fecha = new Date(orden.fecha).toLocaleDateString();
+    const detalle = await this.ordenesProduccionService.findOne(orden.id);
+    const consumos = detalle.movimientos.filter(
+      (m) => m.tipo === MovimientoTipo.CONSUMO,
+    );
+
+    if (consumos.length === 0) {
+      return `Entrega del ${fecha}`;
+    }
+
+    const materiales = consumos
+      .map(
+        (m) =>
+          `${m.cantidad.toString()} ${m.item.colorNombre ? `${m.item.nombre} ${m.item.colorNombre}` : m.item.nombre}`,
+      )
+      .join(' + ');
+    return `${fecha} · ${materiales}`;
+  }
+
+  private async manejarRecepcionOrden(
     telefono: string,
     texto: string,
     session: WhatsappSession,
-  ): Promise<string> | string {
+  ): Promise<string> {
     const numero = Number(texto.trim());
     if (
       !Number.isInteger(numero) ||
@@ -432,12 +509,12 @@ export class ConversationService {
     return this.pedirItem(
       session,
       Categoria.PRODUCTO,
-      FlowStep.RECEPCION_ITEM,
+      FlowStep.RECEPCION_CANTIDAD,
       '¿Qué producto terminado trae?',
     );
   }
 
-  private async finalizarRecepcion(
+  private async prepararRecepcion(
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -449,20 +526,26 @@ export class ConversationService {
 
     const item = await this.itemsService.findOne(session.itemId!);
     const operario = await this.operariosService.findOne(session.operarioId!);
-    await this.movimientosService.create({
-      itemId: item.id,
-      tipo: MovimientoTipo.PRODUCCION,
-      cantidad,
-      operarioId: operario.id,
-      ordenProduccionId: session.ordenProduccionId ?? undefined,
-    });
-    const stock = await this.stockService.getStock(item.id);
 
-    this.sessionStore.reiniciar(telefono);
-    return `✅ Recepción registrada: ${cantidad} de ${etiquetaItem(item)} de ${operario.nombre}.\nStock actual: ${stock}\n\n${MENSAJE_MENU}`;
+    return this.pedirConfirmacion(
+      telefono,
+      session,
+      {
+        tipoAccion: 'MOVIMIENTO',
+        payload: {
+          itemId: item.id,
+          tipo: MovimientoTipo.PRODUCCION,
+          cantidad,
+          operarioId: operario.id,
+          ordenProduccionId: session.ordenProduccionId ?? undefined,
+        },
+        etiquetaItem: etiquetaItem(item),
+      },
+      `Vas a registrar una *recepción* de ${cantidad} de ${etiquetaItem(item)} de ${operario.nombre}.`,
+    );
   }
 
-  private async finalizarVenta(
+  private async prepararVenta(
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -473,18 +556,19 @@ export class ConversationService {
     }
 
     const item = await this.itemsService.findOne(session.itemId!);
-    await this.movimientosService.create({
-      itemId: item.id,
-      tipo: MovimientoTipo.VENTA,
-      cantidad,
-    });
-    const stock = await this.stockService.getStock(item.id);
-
-    this.sessionStore.reiniciar(telefono);
-    return `✅ Venta registrada: ${cantidad} de ${etiquetaItem(item)}.\nStock actual: ${stock}\n\n${MENSAJE_MENU}`;
+    return this.pedirConfirmacion(
+      telefono,
+      session,
+      {
+        tipoAccion: 'MOVIMIENTO',
+        payload: { itemId: item.id, tipo: MovimientoTipo.VENTA, cantidad },
+        etiquetaItem: etiquetaItem(item),
+      },
+      `Vas a registrar una *venta* de ${cantidad} de ${etiquetaItem(item)}.`,
+    );
   }
 
-  private async finalizarAjuste(
+  private async prepararAjuste(
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -495,15 +579,16 @@ export class ConversationService {
     }
 
     const item = await this.itemsService.findOne(session.itemId!);
-    await this.movimientosService.create({
-      itemId: item.id,
-      tipo: MovimientoTipo.AJUSTE,
-      cantidad,
-    });
-    const stock = await this.stockService.getStock(item.id);
-
-    this.sessionStore.reiniciar(telefono);
-    return `✅ Ajuste registrado: ${cantidad > 0 ? '+' : ''}${cantidad} de ${etiquetaItem(item)}.\nStock actual: ${stock}\n\n${MENSAJE_MENU}`;
+    return this.pedirConfirmacion(
+      telefono,
+      session,
+      {
+        tipoAccion: 'MOVIMIENTO',
+        payload: { itemId: item.id, tipo: MovimientoTipo.AJUSTE, cantidad },
+        etiquetaItem: etiquetaItem(item),
+      },
+      `Vas a registrar un *ajuste* de ${cantidad > 0 ? '+' : ''}${cantidad} en ${etiquetaItem(item)}.`,
+    );
   }
 
   private async finalizarStock(
@@ -535,19 +620,51 @@ export class ConversationService {
     return `📦 *Stock actual*\n${lineas}\n\n${MENSAJE_MENU}`;
   }
 
-  private async finalizarNuevaOperaria(
+  private async mostrarUltimosMovimientos(telefono: string): Promise<string> {
+    const movimientos = await this.movimientosService.findAll();
+    this.sessionStore.reiniciar(telefono);
+
+    if (movimientos.length === 0) {
+      return `Todavía no hay movimientos registrados.\n\n${MENSAJE_MENU}`;
+    }
+
+    const lineas = movimientos
+      .slice(0, 8)
+      .map((mov) => {
+        const fecha = new Date(mov.fecha).toLocaleDateString();
+        const nombre = mov.item.colorNombre
+          ? `${mov.item.nombre} ${mov.item.colorNombre}`
+          : mov.item.nombre;
+        const esAjustePositivo =
+          mov.tipo === MovimientoTipo.AJUSTE && Number(mov.cantidad) > 0;
+        const signo =
+          mov.tipo === MovimientoTipo.AJUSTE
+            ? esAjustePositivo
+              ? '+'
+              : ''
+            : (SIGNO_POR_TIPO[mov.tipo] ?? '+');
+        return `• ${fecha} ${mov.tipo}: ${signo}${mov.cantidad.toString()} ${nombre}`;
+      })
+      .join('\n');
+
+    return `🕓 *Últimos movimientos*\n${lineas}\n\n${MENSAJE_MENU}`;
+  }
+
+  private prepararNuevaOperaria(
     telefono: string,
     texto: string,
-  ): Promise<string> {
+    session: WhatsappSession,
+  ): string {
     const nombre = texto.trim();
     if (!nombre) {
       return 'Ingresá un nombre válido.';
     }
-
-    const operaria = await this.operariosService.create({ nombre });
-
-    this.sessionStore.reiniciar(telefono);
-    return `✅ Operaria agregada: ${operaria.nombre}.\n\n${MENSAJE_MENU}`;
+    return this.pedirConfirmacion(
+      telefono,
+      session,
+      { tipoAccion: 'OPERARIA', nombre },
+      `Vas a agregar a *${nombre}* como operaria.`,
+    );
   }
 
   private manejarNuevoItemCategoria(
@@ -606,18 +723,18 @@ export class ConversationService {
     return '¿Tiene color? Respondé si o no.';
   }
 
-  private async manejarNuevoItemTieneColor(
+  private manejarNuevoItemTieneColor(
     telefono: string,
     texto: string,
     session: WhatsappSession,
-  ): Promise<string> {
+  ): string {
     const respuesta = texto.trim().toLowerCase();
     if (respuesta !== 'si' && respuesta !== 'sí' && respuesta !== 'no') {
       return 'Respondé si o no.';
     }
 
     if (respuesta === 'no') {
-      return this.crearNuevoItem(telefono, session, null);
+      return this.pedirConfirmacionNuevoItem(telefono, session, null);
     }
 
     session.step = FlowStep.NUEVO_ITEM_COLOR;
@@ -625,32 +742,97 @@ export class ConversationService {
     return '¿De qué color?';
   }
 
-  private async finalizarNuevoItemConColor(
+  private prepararNuevoItemConColor(
     telefono: string,
     texto: string,
     session: WhatsappSession,
-  ): Promise<string> {
+  ): string {
     const color = texto.trim();
     if (!color) {
       return 'Ingresá un color válido.';
     }
-    return this.crearNuevoItem(telefono, session, color);
+    return this.pedirConfirmacionNuevoItem(telefono, session, color);
   }
 
-  private async crearNuevoItem(
+  private pedirConfirmacionNuevoItem(
     telefono: string,
     session: WhatsappSession,
     colorNombre: string | null,
-  ): Promise<string> {
-    const item = await this.itemsService.create({
-      nombre: session.nuevoItemNombre!,
-      categoria: session.nuevoItemCategoria!,
-      unidad: session.nuevoItemUnidad!,
-      tieneColor: colorNombre !== null,
-      colorNombre: colorNombre ?? undefined,
-    });
+  ): string {
+    const nombreCompleto = colorNombre
+      ? `${session.nuevoItemNombre} ${colorNombre}`
+      : session.nuevoItemNombre;
+    return this.pedirConfirmacion(
+      telefono,
+      session,
+      {
+        tipoAccion: 'ITEM',
+        nombre: session.nuevoItemNombre!,
+        categoria: session.nuevoItemCategoria!,
+        unidad: session.nuevoItemUnidad!,
+        colorNombre,
+      },
+      `Vas a agregar el item *${nombreCompleto}* (${session.nuevoItemCategoria}, ${session.nuevoItemUnidad}).`,
+    );
+  }
 
+  private async manejarConfirmacion(
+    telefono: string,
+    texto: string,
+    session: WhatsappSession,
+  ): Promise<string> {
+    const respuesta = normalizarSiNo(texto);
+    if (respuesta === null) {
+      return 'Respondé *sí* o *no* (o "0" para cancelar).';
+    }
+
+    const accion = session.accionPendiente;
     this.sessionStore.reiniciar(telefono);
-    return `✅ Item agregado: ${etiquetaItem(item)}.\n\n${MENSAJE_MENU}`;
+
+    if (!respuesta) {
+      return `Cancelado, no se registró nada.\n\n${MENSAJE_MENU}`;
+    }
+    if (!accion) {
+      return MENSAJE_MENU;
+    }
+
+    switch (accion.tipoAccion) {
+      case 'MOVIMIENTO':
+        return this.ejecutarMovimientoPendiente(accion);
+      case 'OPERARIA': {
+        const operaria = await this.operariosService.create({
+          nombre: accion.nombre,
+        });
+        return `✅ Operaria agregada: ${operaria.nombre}.\n\n${MENSAJE_MENU}`;
+      }
+      case 'ITEM': {
+        const item = await this.itemsService.create({
+          nombre: accion.nombre,
+          categoria: accion.categoria,
+          unidad: accion.unidad,
+          tieneColor: accion.colorNombre !== null,
+          colorNombre: accion.colorNombre ?? undefined,
+        });
+        return `✅ Item agregado: ${etiquetaItem(item)}.\n\n${MENSAJE_MENU}`;
+      }
+    }
+  }
+
+  private async ejecutarMovimientoPendiente(
+    accion: AccionMovimientoPendiente,
+  ): Promise<string> {
+    let payload = accion.payload;
+    if (accion.crearOrdenParaOperario) {
+      const orden = await this.ordenesProduccionService.create({
+        operarioId: accion.crearOrdenParaOperario,
+        observaciones: 'Entrega registrada por WhatsApp',
+      });
+      payload = { ...payload, ordenProduccionId: orden.id };
+    }
+
+    await this.movimientosService.create(payload);
+    const stock = await this.stockService.getStock(payload.itemId);
+
+    return `✅ Registrado: ${accion.payload.cantidad} de ${accion.etiquetaItem}.\nStock actual: ${stock}${accion.mensajeExtra ?? ''}\n\n${MENSAJE_MENU}`;
   }
 }

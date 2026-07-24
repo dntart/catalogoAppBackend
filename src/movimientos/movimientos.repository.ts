@@ -2,6 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { Movimiento, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
+const INCLUDE_RELACIONES = {
+  item: true,
+  operario: true,
+} satisfies Prisma.MovimientoInclude;
+
+export type MovimientoConRelaciones = Prisma.MovimientoGetPayload<{
+  include: typeof INCLUDE_RELACIONES;
+}>;
+
 @Injectable()
 export class MovimientosRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -10,18 +19,20 @@ export class MovimientosRepository {
     return this.prisma.movimiento.create({ data });
   }
 
-  findAll(where?: Prisma.MovimientoWhereInput): Promise<Movimiento[]> {
+  findAll(
+    where?: Prisma.MovimientoWhereInput,
+  ): Promise<MovimientoConRelaciones[]> {
     return this.prisma.movimiento.findMany({
       where,
       orderBy: { fecha: 'desc' },
-      include: { item: true, operario: true },
+      include: INCLUDE_RELACIONES,
     });
   }
 
-  findById(id: string): Promise<Movimiento | null> {
+  findById(id: string): Promise<MovimientoConRelaciones | null> {
     return this.prisma.movimiento.findUnique({
       where: { id },
-      include: { item: true, operario: true },
+      include: INCLUDE_RELACIONES,
     });
   }
 }

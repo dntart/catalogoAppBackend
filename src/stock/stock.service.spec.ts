@@ -31,14 +31,17 @@ describe('StockService', () => {
     sumarCantidadesPorTipo: jest.Mock;
     sumarCantidadesPorItemGlobal: jest.Mock;
   };
-  let itemsService: { findAll: jest.Mock };
+  let itemsService: { findAll: jest.Mock; findOne: jest.Mock };
 
   beforeEach(() => {
     repository = {
       sumarCantidadesPorTipo: jest.fn(),
       sumarCantidadesPorItemGlobal: jest.fn(),
     };
-    itemsService = { findAll: jest.fn() };
+    itemsService = {
+      findAll: jest.fn(),
+      findOne: jest.fn().mockResolvedValue(ITEM_GABARDINA),
+    };
     service = new StockService(
       repository as unknown as StockRepository,
       itemsService as unknown as ItemsService,
@@ -123,6 +126,19 @@ describe('StockService', () => {
 
       await expect(service.validarStockSuficiente('item-1', 6)).rejects.toThrow(
         BadRequestException,
+      );
+    });
+
+    it('el mensaje de error usa el nombre del item, no su UUID', async () => {
+      repository.sumarCantidadesPorTipo.mockResolvedValue([
+        {
+          tipo: MovimientoTipo.COMPRA,
+          _sum: { cantidad: new Prisma.Decimal(5) },
+        },
+      ]);
+
+      await expect(service.validarStockSuficiente('item-1', 6)).rejects.toThrow(
+        'Stock insuficiente de Gabardina Beige',
       );
     });
   });
