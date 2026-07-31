@@ -13,6 +13,7 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { OrdenesProduccionModule } from './ordenes-produccion/ordenes-produccion.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { WhatsappModule } from './whatsapp/whatsapp.module';
     PrismaModule,
     UsersModule,
     AuthModule,
+    AdminModule,
     ItemsModule,
     OperariosModule,
     OrdenesProduccionModule,

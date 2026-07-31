@@ -6,16 +6,27 @@ import { PrismaService } from '../prisma/prisma.service';
 export class ItemsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(data: Prisma.ItemCreateInput): Promise<Item> {
-    return this.prisma.item.create({ data });
+  create(
+    negocioId: string,
+    data: Omit<Prisma.ItemCreateInput, 'negocio'>,
+  ): Promise<Item> {
+    return this.prisma.item.create({
+      data: { ...data, negocio: { connect: { id: negocioId } } },
+    });
   }
 
-  findAll(where?: Prisma.ItemWhereInput): Promise<Item[]> {
-    return this.prisma.item.findMany({ where, orderBy: { nombre: 'asc' } });
+  findAll(
+    negocioId: string,
+    where?: Omit<Prisma.ItemWhereInput, 'negocioId'>,
+  ): Promise<Item[]> {
+    return this.prisma.item.findMany({
+      where: { ...where, negocioId },
+      orderBy: { nombre: 'asc' },
+    });
   }
 
-  findById(id: string): Promise<Item | null> {
-    return this.prisma.item.findUnique({ where: { id } });
+  findById(negocioId: string, id: string): Promise<Item | null> {
+    return this.prisma.item.findFirst({ where: { id, negocioId } });
   }
 
   update(id: string, data: Prisma.ItemUpdateInput): Promise<Item> {

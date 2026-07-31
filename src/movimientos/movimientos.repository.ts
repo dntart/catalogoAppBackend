@@ -15,23 +15,32 @@ export type MovimientoConRelaciones = Prisma.MovimientoGetPayload<{
 export class MovimientosRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(data: Prisma.MovimientoCreateInput): Promise<Movimiento> {
-    return this.prisma.movimiento.create({ data });
+  create(
+    negocioId: string,
+    data: Omit<Prisma.MovimientoCreateInput, 'negocio'>,
+  ): Promise<Movimiento> {
+    return this.prisma.movimiento.create({
+      data: { ...data, negocio: { connect: { id: negocioId } } },
+    });
   }
 
   findAll(
-    where?: Prisma.MovimientoWhereInput,
+    negocioId: string,
+    where?: Omit<Prisma.MovimientoWhereInput, 'negocioId'>,
   ): Promise<MovimientoConRelaciones[]> {
     return this.prisma.movimiento.findMany({
-      where,
+      where: { ...where, negocioId },
       orderBy: { fecha: 'desc' },
       include: INCLUDE_RELACIONES,
     });
   }
 
-  findById(id: string): Promise<MovimientoConRelaciones | null> {
-    return this.prisma.movimiento.findUnique({
-      where: { id },
+  findById(
+    negocioId: string,
+    id: string,
+  ): Promise<MovimientoConRelaciones | null> {
+    return this.prisma.movimiento.findFirst({
+      where: { id, negocioId },
       include: INCLUDE_RELACIONES,
     });
   }

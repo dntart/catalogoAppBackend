@@ -6,16 +6,27 @@ import { PrismaService } from '../prisma/prisma.service';
 export class OperariosRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(data: Prisma.OperarioCreateInput): Promise<Operario> {
-    return this.prisma.operario.create({ data });
+  create(
+    negocioId: string,
+    data: Omit<Prisma.OperarioCreateInput, 'negocio'>,
+  ): Promise<Operario> {
+    return this.prisma.operario.create({
+      data: { ...data, negocio: { connect: { id: negocioId } } },
+    });
   }
 
-  findAll(where?: Prisma.OperarioWhereInput): Promise<Operario[]> {
-    return this.prisma.operario.findMany({ where, orderBy: { nombre: 'asc' } });
+  findAll(
+    negocioId: string,
+    where?: Omit<Prisma.OperarioWhereInput, 'negocioId'>,
+  ): Promise<Operario[]> {
+    return this.prisma.operario.findMany({
+      where: { ...where, negocioId },
+      orderBy: { nombre: 'asc' },
+    });
   }
 
-  findById(id: string): Promise<Operario | null> {
-    return this.prisma.operario.findUnique({ where: { id } });
+  findById(negocioId: string, id: string): Promise<Operario | null> {
+    return this.prisma.operario.findFirst({ where: { id, negocioId } });
   }
 
   update(id: string, data: Prisma.OperarioUpdateInput): Promise<Operario> {

@@ -17,6 +17,8 @@ import { Movimiento } from '@prisma/client';
 import { MovimientosService } from './movimientos.service';
 import { CreateMovimientoDto } from './dto/create-movimiento.dto';
 import { MovimientoEntity } from './entities/movimiento.entity';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 
 @ApiTags('movimientos')
 @ApiBearerAuth()
@@ -37,21 +39,30 @@ export class MovimientosController {
     description: 'Cantidad inválida o stock insuficiente',
   })
   @ApiResponse({ status: 404, description: 'Item u operario no encontrado' })
-  create(@Body() dto: CreateMovimientoDto): Promise<Movimiento> {
-    return this.movimientosService.create(dto);
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateMovimientoDto,
+  ): Promise<Movimiento> {
+    return this.movimientosService.create(user.negocioId, dto);
   }
 
   @Get()
   @ApiOperation({ summary: 'Listar movimientos, con filtro opcional por item' })
   @ApiResponse({ status: 200, type: [MovimientoEntity] })
-  findAll(@Query('itemId') itemId?: string): Promise<Movimiento[]> {
-    return this.movimientosService.findAll(itemId);
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('itemId') itemId?: string,
+  ): Promise<Movimiento[]> {
+    return this.movimientosService.findAll(user.negocioId, itemId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Obtener un movimiento por id' })
   @ApiResponse({ status: 200, type: MovimientoEntity })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Movimiento> {
-    return this.movimientosService.findOne(id);
+  findOne(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Movimiento> {
+    return this.movimientosService.findOne(user.negocioId, id);
   }
 }

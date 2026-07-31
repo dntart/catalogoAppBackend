@@ -29,17 +29,21 @@ export class MovimientosService {
     private readonly ordenesProduccionService: OrdenesProduccionService,
   ) {}
 
-  async create(dto: CreateMovimientoDto): Promise<Movimiento> {
-    await this.itemsService.findOne(dto.itemId);
+  async create(
+    negocioId: string,
+    dto: CreateMovimientoDto,
+  ): Promise<Movimiento> {
+    await this.itemsService.findOne(negocioId, dto.itemId);
 
     let operarioId = dto.operarioId;
     if (dto.ordenProduccionId) {
       const orden = await this.ordenesProduccionService.findOne(
+        negocioId,
         dto.ordenProduccionId,
       );
       operarioId = orden.operarioId;
     } else if (operarioId) {
-      await this.operariosService.findOne(operarioId);
+      await this.operariosService.findOne(negocioId, operarioId);
     }
 
     if (dto.tipo !== MovimientoTipo.AJUSTE && dto.cantidad <= 0) {
@@ -49,10 +53,14 @@ export class MovimientosService {
     }
 
     if (TIPOS_SALIDA.includes(dto.tipo)) {
-      await this.stockService.validarStockSuficiente(dto.itemId, dto.cantidad);
+      await this.stockService.validarStockSuficiente(
+        negocioId,
+        dto.itemId,
+        dto.cantidad,
+      );
     }
 
-    return this.movimientosRepository.create({
+    return this.movimientosRepository.create(negocioId, {
       item: { connect: { id: dto.itemId } },
       operario: operarioId ? { connect: { id: operarioId } } : undefined,
       ordenProduccion: dto.ordenProduccionId
@@ -65,12 +73,21 @@ export class MovimientosService {
     });
   }
 
-  findAll(itemId?: string): Promise<MovimientoConRelaciones[]> {
-    return this.movimientosRepository.findAll(itemId ? { itemId } : undefined);
+  findAll(
+    negocioId: string,
+    itemId?: string,
+  ): Promise<MovimientoConRelaciones[]> {
+    return this.movimientosRepository.findAll(
+      negocioId,
+      itemId ? { itemId } : undefined,
+    );
   }
 
-  async findOne(id: string): Promise<MovimientoConRelaciones> {
-    const movimiento = await this.movimientosRepository.findById(id);
+  async findOne(
+    negocioId: string,
+    id: string,
+  ): Promise<MovimientoConRelaciones> {
+    const movimiento = await this.movimientosRepository.findById(negocioId, id);
     if (!movimiento) {
       throw new NotFoundException(`Movimiento ${id} no encontrado`);
     }

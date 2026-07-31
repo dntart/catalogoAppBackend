@@ -5,17 +5,18 @@ import { PrismaService } from '../prisma/prisma.service';
 export class StockRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  sumarCantidadesPorTipo(itemId: string) {
+  sumarCantidadesPorTipo(negocioId: string, itemId: string) {
     return this.prisma.movimiento.groupBy({
       by: ['tipo'],
-      where: { itemId },
+      where: { itemId, negocioId },
       _sum: { cantidad: true },
     });
   }
 
-  sumarCantidadesPorItemGlobal() {
+  sumarCantidadesPorItemGlobal(negocioId: string) {
     return this.prisma.movimiento.groupBy({
       by: ['itemId', 'tipo'],
+      where: { negocioId },
       _sum: { cantidad: true },
     });
   }

@@ -10,6 +10,7 @@ import { StockService } from './stock.service';
 import { StockRepository } from './stock.repository';
 import { ItemsService } from '../items/items.service';
 
+const NEGOCIO_ID = 'negocio-1';
 const ITEM_GABARDINA = {
   id: 'item-1',
   nombre: 'Gabardina',
@@ -23,6 +24,14 @@ const ITEM_ZORRO = {
   colorNombre: null,
   categoria: Categoria.PRODUCTO,
   unidad: Unidad.UNIDAD,
+} as Item;
+const ITEM_CON_MINIMO = {
+  id: 'item-3',
+  nombre: 'Hilo Poliéster',
+  colorNombre: 'Blanco',
+  categoria: Categoria.MATERIAL,
+  unidad: Unidad.CONO,
+  stockMinimo: new Prisma.Decimal(5),
 } as Item;
 
 describe('StockService', () => {
@@ -52,7 +61,7 @@ describe('StockService', () => {
     it('devuelve 0 cuando el item no tiene movimientos', async () => {
       repository.sumarCantidadesPorTipo.mockResolvedValue([]);
 
-      await expect(service.getStock('item-1')).resolves.toBe(0);
+      await expect(service.getStock(NEGOCIO_ID, 'item-1')).resolves.toBe(0);
     });
 
     it('suma COMPRA y PRODUCCION, resta CONSUMO y VENTA', async () => {
@@ -75,7 +84,7 @@ describe('StockService', () => {
         },
       ]);
 
-      await expect(service.getStock('item-1')).resolves.toBe(14);
+      await expect(service.getStock(NEGOCIO_ID, 'item-1')).resolves.toBe(14);
     });
 
     it('aplica AJUSTE respetando su propio signo', async () => {
@@ -90,7 +99,7 @@ describe('StockService', () => {
         },
       ]);
 
-      await expect(service.getStock('item-1')).resolves.toBe(8);
+      await expect(service.getStock(NEGOCIO_ID, 'item-1')).resolves.toBe(8);
     });
 
     it('trata un grupo sin suma (_sum.cantidad null) como cero', async () => {
@@ -98,7 +107,7 @@ describe('StockService', () => {
         { tipo: MovimientoTipo.COMPRA, _sum: { cantidad: null } },
       ]);
 
-      await expect(service.getStock('item-1')).resolves.toBe(0);
+      await expect(service.getStock(NEGOCIO_ID, 'item-1')).resolves.toBe(0);
     });
   });
 
@@ -112,7 +121,7 @@ describe('StockService', () => {
       ]);
 
       await expect(
-        service.validarStockSuficiente('item-1', 5),
+        service.validarStockSuficiente(NEGOCIO_ID, 'item-1', 5),
       ).resolves.toBeUndefined();
     });
 
@@ -124,9 +133,9 @@ describe('StockService', () => {
         },
       ]);
 
-      await expect(service.validarStockSuficiente('item-1', 6)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.validarStockSuficiente(NEGOCIO_ID, 'item-1', 6),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('el mensaje de error usa el nombre del item, no su UUID', async () => {
@@ -137,9 +146,9 @@ describe('StockService', () => {
         },
       ]);
 
-      await expect(service.validarStockSuficiente('item-1', 6)).rejects.toThrow(
-        'Stock insuficiente de Gabardina Beige',
-      );
+      await expect(
+        service.validarStockSuficiente(NEGOCIO_ID, 'item-1', 6),
+      ).rejects.toThrow('Stock insuficiente de Gabardina Beige');
     });
   });
 
@@ -164,7 +173,7 @@ describe('StockService', () => {
         },
       ]);
 
-      const resumen = await service.getResumen();
+      const resumen = await service.getResumen(NEGOCIO_ID);
 
       expect(resumen).toEqual([
         {
@@ -173,6 +182,8 @@ describe('StockService', () => {
           categoria: Categoria.MATERIAL,
           unidad: Unidad.METRO,
           stock: 15,
+          stockMinimo: null,
+          bajoMinimo: false,
         },
         {
           itemId: 'item-2',
@@ -180,6 +191,8 @@ describe('StockService', () => {
           categoria: Categoria.PRODUCTO,
           unidad: Unidad.UNIDAD,
           stock: 3,
+          stockMinimo: null,
+          bajoMinimo: false,
         },
       ]);
     });
@@ -188,7 +201,7 @@ describe('StockService', () => {
       itemsService.findAll.mockResolvedValue([ITEM_GABARDINA, ITEM_ZORRO]);
       repository.sumarCantidadesPorItemGlobal.mockResolvedValue([]);
 
-      const resumen = await service.getResumen(Categoria.PRODUCTO);
+      const resumen = await service.getResumen(NEGOCIO_ID, Categoria.PRODUCTO);
 
       expect(resumen).toEqual([
         {
@@ -197,6 +210,33 @@ describe('StockService', () => {
           categoria: Categoria.PRODUCTO,
           unidad: Unidad.UNIDAD,
           stock: 0,
+          stockMinimo: null,
+          bajoMinimo: false,
+        },
+      ]);
+    });
+
+    it('marca bajoMinimo cuando el stock cae al minimo configurado o por debajo', async () => {
+      itemsService.findAll.mockResolvedValue([ITEM_CON_MINIMO]);
+      repository.sumarCantidadesPorItemGlobal.mockResolvedValue([
+        {
+          itemId: 'item-3',
+          tipo: MovimientoTipo.COMPRA,
+          _sum: { cantidad: new Prisma.Decimal(5) },
+        },
+      ]);
+
+      const resumen = await service.getResumen(NEGOCIO_ID);
+
+      expect(resumen).toEqual([
+        {
+          itemId: 'item-3',
+          nombre: 'Hilo Poliéster Blanco',
+          categoria: Categoria.MATERIAL,
+          unidad: Unidad.CONO,
+          stock: 5,
+          stockMinimo: 5,
+          bajoMinimo: true,
         },
       ]);
     });

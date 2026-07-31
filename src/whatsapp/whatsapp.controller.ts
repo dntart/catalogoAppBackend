@@ -1,16 +1,16 @@
 import {
+  Body,
   Controller,
   HttpCode,
   HttpStatus,
   Logger,
   Post,
-  Body,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
 import { ConversationService } from './conversation/conversation.service';
 import { WhatsappService } from './whatsapp.service';
+import { UsersService } from '../users/users.service';
 
 @ApiExcludeController()
 @Public()
@@ -21,7 +21,7 @@ export class WhatsappController {
   constructor(
     private readonly conversationService: ConversationService,
     private readonly whatsappService: WhatsappService,
-    private readonly configService: ConfigService,
+    private readonly usersService: UsersService,
   ) {}
 
   @Post('webhook')
@@ -29,16 +29,19 @@ export class WhatsappController {
   async recibirMensaje(@Body() body: Record<string, string>): Promise<void> {
     const from = body.From;
     const texto = body.Body ?? '';
-    const ownerNumber = this.configService.get<string>('OWNER_WHATSAPP_NUMBER');
 
-    if (!from || !ownerNumber || from !== ownerNumber) {
-      this.logger.warn(
-        `Mensaje ignorado de un número no autorizado: ${from ?? 'desconocido'}`,
-      );
+    if (!from) {
+      return;
+    }
+
+    const owner = await this.usersService.findByWhatsappNumber(from);
+    if (!owner || !owner.activo) {
+      this.logger.warn(`Mensaje ignorado de un número no registrado: ${from}`);
       return;
     }
 
     const respuesta = await this.conversationService.manejarMensaje(
+      owner.negocioId,
       from,
       texto,
     );

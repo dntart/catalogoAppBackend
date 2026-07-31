@@ -1,6 +1,6 @@
 # Fauna de Tela
 
-Sistema de gestión de producción e inventario para un emprendimiento de muñecos de tela. Lleva el catálogo de productos y materiales, registra quién hizo qué movimiento (compra, consumo, producción, venta, ajuste) y calcula el stock siempre a partir de ese historial — nunca se edita un número de stock a mano.
+Sistema de gestión de producción e inventario multi-tenant (SaaS) para emprendimientos textiles. Lleva el catálogo de productos y materiales, registra quién hizo qué movimiento (compra, consumo, producción, venta, ajuste) y calcula el stock siempre a partir de ese historial — nunca se edita un número de stock a mano. Cada negocio (`Negocio`) tiene sus propios datos, completamente aislados de los demás, y puede operar tanto desde la API/Swagger como desde un bot de WhatsApp.
 
 Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y cómo replicar el proceso completo de armado desde cero (útil si querés adaptar esta misma base a otro rubro/negocio).
 
@@ -10,19 +10,21 @@ Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y 
 
 1. [Stack](#stack)
 2. [Arquitectura](#arquitectura)
-3. [Modelo de datos](#modelo-de-datos)
-4. [Motor de stock](#motor-de-stock)
-5. [Trazabilidad: entrega de material → producto terminado](#trazabilidad-entrega-de-material--producto-terminado)
-6. [Autenticación](#autenticación)
-7. [Bot de WhatsApp](#bot-de-whatsapp)
-8. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
-9. [Variables de entorno](#variables-de-entorno)
-10. [Scripts disponibles](#scripts-disponibles)
-11. [API — endpoints](#api--endpoints)
-12. [Testing](#testing)
-13. [Troubleshooting](#troubleshooting)
-14. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
-15. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
+3. [Multi-tenancy](#multi-tenancy)
+4. [Modelo de datos](#modelo-de-datos)
+5. [Motor de stock](#motor-de-stock)
+6. [Trazabilidad: entrega de material → producto terminado](#trazabilidad-entrega-de-material--producto-terminado)
+7. [Autenticación](#autenticación)
+8. [Alta de negocios (admin)](#alta-de-negocios-admin)
+9. [Bot de WhatsApp](#bot-de-whatsapp)
+10. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
+11. [Variables de entorno](#variables-de-entorno)
+12. [Scripts disponibles](#scripts-disponibles)
+13. [API — endpoints](#api--endpoints)
+14. [Testing](#testing)
+15. [Troubleshooting](#troubleshooting)
+16. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
+17. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
 
 ---
 
@@ -62,6 +64,23 @@ src/
 
 `movimientos` depende de `stock`, `items` y `operarios` (para validar existencia y stock antes de crear un movimiento). `stock` no depende de `movimientos`: consulta la tabla `movimientos` directamente vía su propio repository, evitando un ciclo de módulos.
 
+## Multi-tenancy
+
+El sistema es multi-tenant desde el modelo de datos: todas las tablas de negocio (`Item`, `Operario`, `Movimiento`, `OrdenProduccion`, `User`) tienen una columna `negocioId` que las liga a un `Negocio`. Es una base de datos compartida (no una DB ni un schema por cliente) — la elección correcta para esta etapa: más simple de operar y migrar que aislar por schema/DB, y suficiente mientras el volumen por tenant sea chico.
+
+**El aislamiento se fuerza por firma de método, no solo por convención**: todo método público de cada `Repository`/`Service` recibe `negocioId` como **primer parámetro obligatorio**, así que es un error de compilación de TypeScript olvidarse de filtrarlo — no depende de que alguien recuerde agregar un `where: { negocioId }` a mano en cada query nueva.
+
+```ts
+// ejemplo real, src/items/items.repository.ts
+findById(negocioId: string, id: string): Promise<Item | null> {
+  return this.prisma.item.findFirst({ where: { id, negocioId } });
+}
+```
+
+Notar `findFirst` en vez de `findUnique`: como la unicidad de `id` ya no alcanza para saber que ese registro pertenece a este tenant, hay que filtrar por ambos campos en la misma query (`findUnique` sólo acepta filtrar por campos únicos).
+
+**De dónde sale el `negocioId` en cada request**: viaja dentro del JWT (`negocioId` en el payload, ver [Autenticación](#autenticación)) y el `Controller` lo extrae de `@CurrentUser()` — nunca del body ni de un query param, así que un usuario no puede pedir datos de otro negocio ni aunque lo intente a propósito. En el bot de WhatsApp, se resuelve a partir del número de teléfono entrante (ver [Bot de WhatsApp](#bot-de-whatsapp)).
+
 ## Modelo de datos
 
 `prisma/schema.prisma` define:
@@ -71,35 +90,49 @@ src/
 - `Unidad`: `METRO` | `KG` | `CONO` | `UNIDAD`
 - `MovimientoTipo`: `COMPRA` | `CONSUMO` | `PRODUCCION` | `VENTA` | `AJUSTE`
 
-**User** — el dueño del emprendimiento (o cualquier otra persona con acceso a la app; no confundir con `Operario`, ver [Autenticación](#autenticación))
+**Negocio** — el tenant. Raíz de la que cuelga todo lo demás.
 | campo | tipo |
 |---|---|
 | id | String (uuid) |
-| email | String (unique) |
-| passwordHash | String |
 | nombre | String |
 | activo | Boolean |
 | createdAt | DateTime |
+
+**User** — el dueño del emprendimiento (o cualquier otra persona con acceso a la app; no confundir con `Operario`, ver [Autenticación](#autenticación))
+| campo | tipo | notas |
+|---|---|---|
+| id | String (uuid) | |
+| negocioId | String | FK a `Negocio` — a qué tenant pertenece este usuario |
+| email | String (unique) | único en toda la plataforma, no solo dentro del negocio |
+| passwordHash | String | |
+| nombre | String | |
+| whatsappNumber | String? (unique) | número de WhatsApp vinculado; el bot lo usa para resolver a qué negocio pertenece un mensaje entrante |
+| esSuperAdmin | Boolean | privilegio de plataforma, no de negocio — habilita `POST /admin/negocios` (ver [Alta de negocios](#alta-de-negocios-admin)) |
+| activo | Boolean | |
+| createdAt | DateTime | |
 
 **Item** — catálogo de materiales y productos
 | campo | tipo | notas |
 |---|---|---|
 | id | String (uuid) | |
+| negocioId | String | FK a `Negocio` |
 | nombre | String | ej. "Gabardina", "Zorro" |
 | categoria | Categoria | |
 | unidad | Unidad | |
 | tieneColor | Boolean | si es `false`, `colorNombre` siempre es `null` |
 | colorNombre | String? | solo relevante si `tieneColor` |
 | imagenUrl | String? | |
+| stockMinimo | Decimal(10,2)? | opcional; si está seteado, `GET /stock` marca el item con `bajoMinimo: true` cuando el stock calculado cae a ese valor o por debajo (ver [Motor de stock](#motor-de-stock)) |
 | activo | Boolean | soft-flag, no hay borrado físico |
 | createdAt | DateTime | |
 
-Unique compuesto `(nombre, colorNombre)`.
+Unique compuesto `(negocioId, nombre, colorNombre)` — mismo nombre/color puede repetirse entre negocios distintos, no dentro del mismo.
 
 **Operario** — quién hace el movimiento
 | campo | tipo |
 |---|---|
 | id | String (uuid) |
+| negocioId | String (FK a `Negocio`) |
 | nombre | String |
 | activo | Boolean |
 | createdAt | DateTime |
@@ -108,6 +141,7 @@ Unique compuesto `(nombre, colorNombre)`.
 | campo | tipo | notas |
 |---|---|---|
 | id | String (uuid) | |
+| negocioId | String | FK a `Negocio` |
 | itemId | String | FK a Item |
 | operarioId | String? | FK a Operario, opcional (una `COMPRA` a proveedor no siempre tiene un operario asociado). Si el movimiento pertenece a una `OrdenProduccion`, se autocompleta con el operario de esa orden |
 | ordenProduccionId | String? | FK a `OrdenProduccion`, opcional — agrupa la tela entregada (`CONSUMO`) y el producto devuelto (`PRODUCCION`) de una misma entrega |
@@ -116,6 +150,8 @@ Unique compuesto `(nombre, colorNombre)`.
 | fecha | DateTime | default `now()`, puede informarse explícitamente |
 | observaciones | String? | |
 | createdAt | DateTime | |
+
+`OrdenProduccion` tiene la misma columna `negocioId` que el resto, con el mismo propósito de aislamiento.
 
 ## Motor de stock
 
@@ -128,6 +164,8 @@ El stock de un `Item` **nunca se persiste como columna**. Se calcula on-the-fly 
 Antes de crear un movimiento de `CONSUMO` o `VENTA`, `MovimientosService.create()` llama a `StockService.validarStockSuficiente(itemId, cantidad)`, que recalcula el stock actual y lanza `BadRequestException` si la operación lo dejaría negativo. No hay ningún endpoint `PATCH /stock` — la única forma de modificar stock es insertar un `Movimiento`.
 
 Los cálculos usan `Prisma.Decimal` en vez de `number` en los pasos intermedios para evitar errores de redondeo de punto flotante al sumar/restar cantidades.
+
+**Alertas de stock bajo**: `Item.stockMinimo` es un umbral opcional por item. `GET /stock` calcula, además del stock, un flag `bajoMinimo: true` cuando `stockMinimo` está seteado y el stock calculado es `<= stockMinimo`. Es deliberadamente simple — no hay notificaciones push ni email todavía, es un campo que un frontend puede leer para pintar el item en rojo/con un ícono de alerta. El bot de WhatsApp también lo usa: el flujo "Ver stock" antepone ⚠️ a los items bajo mínimo.
 
 ## Trazabilidad: entrega de material → producto terminado
 
@@ -151,9 +189,21 @@ Login vía JWT (`src/auth`):
 
 - `POST /auth/login` (público, `@Public()`) — recibe `{ email, password }`, devuelve `{ accessToken }`. El token expira según `JWT_EXPIRES_IN` (default `7d`).
 - `GET /auth/me` (protegido) — devuelve el usuario autenticado a partir del token.
+- **El payload del JWT incluye `negocioId`** (`{ sub, email, negocioId }`) — es la fuente de verdad de a qué tenant pertenece cada request; todo `Controller` lo lee vía `@CurrentUser()` y lo pasa como primer parámetro a su `Service` (ver [Multi-tenancy](#multi-tenancy)). No hace falta ni se acepta un `negocioId` en el body o la URL de ningún endpoint de negocio.
 - **Todas las demás rutas están protegidas por default** vía un `JwtAuthGuard` global (`APP_GUARD` en `app.module.ts`). Para marcar una ruta como pública se usa el decorator `@Public()` (ver `src/auth/decorators/public.decorator.ts`), que el guard chequea con `Reflector` antes de exigir el token.
 - El token se manda como header `Authorization: Bearer <token>`. En Swagger UI (`/docs`), el botón **Authorize** permite pegar el token una vez y que se use en todos los requests de prueba.
-- Las contraseñas se guardan hasheadas con `bcrypt` (`passwordHash`, nunca en texto plano). El primer usuario (el dueño) se crea vía seed, no vía un endpoint de registro — no existe `POST /users` público, a propósito: no hay un flujo de alta de usuarios auto-servicio en esta v1.
+- Las contraseñas se guardan hasheadas con `bcrypt` (`passwordHash`, nunca en texto plano). El primer usuario de cada negocio se crea vía seed o vía `POST /admin/negocios` (ver [Alta de negocios](#alta-de-negocios-admin)) — no existe un endpoint de registro público (`POST /users`), a propósito: no hay auto-alta de cuentas en esta v1, el alta de un negocio nuevo la hace el dueño de la plataforma.
+- **`esSuperAdmin`** es un flag por `User`, independiente de a qué negocio pertenece — no es un rol dentro del negocio, es el privilegio de plataforma que habilita crear negocios nuevos. Un `User` normal (`esSuperAdmin: false`) nunca lo ve ni lo necesita.
+
+## Alta de negocios (admin)
+
+Cómo se crea un tenant nuevo (un cliente nuevo de esta plataforma):
+
+- `POST /admin/negocios` — protegido por `SuperAdminGuard` (`src/auth/guards/super-admin.guard.ts`), además del `JwtAuthGuard` global. Rechaza con `403` a cualquier usuario cuyo token no tenga `esSuperAdmin: true`.
+- Body (`CreateNegocioDto`): `nombreNegocio`, `ownerEmail`, `ownerPassword` (mínimo 8 caracteres), `ownerNombre`, `ownerWhatsappNumber?`.
+- Crea el `Negocio` y su primer `User` (el dueño de ese negocio, con `esSuperAdmin: false`) en una única transacción (`prisma.$transaction`) — si falla la creación del usuario, no queda un `Negocio` huérfano sin dueño.
+- Es deliberadamente **no self-service**: no hay una página pública de "creá tu cuenta". Para este modelo de negocio (vender a emprendedores textiles con poco tiempo/ganas de usar apps), el alta de un cliente nuevo la hace el operador de la plataforma a mano, llamando este endpoint desde Swagger UI (`/docs`) con su propio token de super-admin. No hace falta construir un frontend de alta para esto.
+- El primer super-admin de la plataforma se crea vía `prisma/seed.ts`, no vía este endpoint (ver [Variables de entorno](#variables-de-entorno)) — tiene que existir al menos un super-admin antes de poder llamar `POST /admin/negocios` la primera vez.
 
 ## Bot de WhatsApp
 
@@ -162,7 +212,7 @@ Pensado para que el dueño registre todo (compra de tela, entrega a una operaria
 **Cómo está armado** (`src/whatsapp`):
 
 - `WhatsappController` (`POST /whatsapp/webhook`, `@Public()`) — recibe los mensajes entrantes que manda Twilio. Como el payload de Twilio trae ~20 campos que no controlamos, el body se lee como `Record<string, string>` en vez de un DTO con `class-validator`, para no chocar con `forbidNonWhitelisted` del `ValidationPipe` global.
-- **Autorización**: no usa JWT. Compara el campo `From` del mensaje contra `OWNER_WHATSAPP_NUMBER` del `.env` — cualquier otro número se ignora y se loguea como advertencia. Es el único mecanismo de acceso para esta v1 de un solo usuario; una versión multi-tenant necesitaría mapear cada número a una cuenta en vez de un único número fijo.
+- **Autorización y resolución de negocio**: no usa JWT. El campo `From` del mensaje se busca contra `User.whatsappNumber` (`UsersService.findByWhatsappNumber`); si no hay match o el usuario está inactivo, el mensaje se ignora y se loguea como advertencia. El `negocioId` del `User` encontrado es el que viaja a `ConversationService.manejarMensaje(negocioId, from, texto)` — así el mismo bot (mismo número de Twilio) atiende a todos los negocios de la plataforma a la vez, cada uno viendo únicamente sus propios datos. Dar de alta el número de un dueño nuevo es simplemente setear `User.whatsappNumber` (vía `POST /admin/negocios` con `ownerWhatsappNumber`, o editándolo después).
 - `ConversationService` (`src/whatsapp/conversation`) — el motor de la conversación: una máquina de estados simple (`FlowStep`) por número de teléfono. Cada paso muestra una lista numerada (materiales, operarios, órdenes abiertas, etc.), guarda en la sesión qué eligió el usuario, y en el último paso de cada flujo llama a `MovimientosService.create()`, `OrdenesProduccionService.create()` o `StockService.getResumen()` — los mismos services que usan el resto de los módulos.
 - `SessionStoreService` — guarda el estado de cada conversación en memoria (`Map<telefono, sesion>`). **Se pierde si el proceso se reinicia** (aceptable para esta v1; para producción real conviene pasar esto a Redis o una tabla). Escribir "menu", "0" o "cancelar" en cualquier momento reinicia la conversación.
 - `WhatsappService` — wrapper fino sobre el SDK de Twilio para mandar la respuesta por la API REST (no se usa TwiML: el webhook siempre responde `200` vacío, y el mensaje se manda aparte).
@@ -207,7 +257,7 @@ docker compose up -d
 # aplicar el schema
 npx prisma migrate dev
 
-# crea la cuenta de login del dueño (OWNER_EMAIL/OWNER_PASSWORD del .env)
+# crea el primer Negocio + su User dueño (esSuperAdmin: true, ver OWNER_* en .env)
 # + carga el catálogo real del negocio
 npm run db:seed
 
@@ -225,10 +275,10 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 | `PORT` | `3000` | opcional, puerto HTTP (`src/main.ts`) |
 | `JWT_SECRET` | string aleatorio largo | firma los tokens (`src/auth`). Generar uno propio, nunca reusar el de ejemplo |
 | `JWT_EXPIRES_IN` | `7d` | opcional, vencimiento del token |
-| `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NOMBRE` | — | solo usados por `prisma/seed.ts` para crear la cuenta de login inicial del dueño; no se leen en runtime |
+| `OWNER_NEGOCIO_NOMBRE` / `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NOMBRE` | — | solo usados por `prisma/seed.ts` para crear el primer `Negocio` y su `User` (con `esSuperAdmin: true`); no se leen en runtime |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | — | credenciales de la [consola de Twilio](https://console.twilio.com/) |
 | `TWILIO_WHATSAPP_FROM` | `whatsapp:+14155238886` | número de origen; el del sandbox por default |
-| `OWNER_WHATSAPP_NUMBER` | `whatsapp:+549...` | único número autorizado a usar el bot (ver [Bot de WhatsApp](#bot-de-whatsapp)) |
+| `OWNER_WHATSAPP_NUMBER` | `whatsapp:+549...` | opcional; si se informa, `prisma/seed.ts` lo guarda como `User.whatsappNumber` del primer negocio. El bot resuelve el negocio de cada mensaje contra esta columna en runtime, no contra la variable de entorno (ver [Bot de WhatsApp](#bot-de-whatsapp)) |
 
 `.env` está en `.gitignore`; `.env.example` es la plantilla versionada.
 
@@ -249,11 +299,14 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 
 ## API — endpoints
 
-> Documentación interactiva completa (probar requests, ver schemas) en `/docs` una vez levantada la API. Lo que sigue es un resumen de referencia rápida. Todas las rutas salvo `POST /auth/login` requieren header `Authorization: Bearer <token>`.
+> Documentación interactiva completa (probar requests, ver schemas) en `/docs` una vez levantada la API. Lo que sigue es un resumen de referencia rápida. Todas las rutas salvo `POST /auth/login` requieren header `Authorization: Bearer <token>`. Todos los endpoints de negocio (items, operarios, movimientos, órdenes, stock) están scopeados automáticamente al `negocioId` del token — nunca hace falta, ni se acepta, pasarlo a mano.
 
 **Auth** (`/auth`)
-- `POST /auth/login` — público. `{ email, password }` → `{ accessToken }`
+- `POST /auth/login` — público. `{ email, password }` → `{ accessToken }` (payload incluye `negocioId`)
 - `GET /auth/me` — usuario autenticado actual
+
+**Admin** (`/admin`) — requiere `esSuperAdmin: true` en el token, si no `403`
+- `POST /admin/negocios` — crea un `Negocio` + su `User` dueño (`CreateNegocioDto`: `nombreNegocio`, `ownerEmail`, `ownerPassword`, `ownerNombre`, `ownerWhatsappNumber?`). Ver [Alta de negocios](#alta-de-negocios-admin)
 
 **Items** (`/items`)
 - `POST /items` — crear (`CreateItemDto`)
@@ -279,7 +332,7 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 - `GET /movimientos/:id`
 
 **Stock** (`/stock`)
-- `GET /stock?categoria=MATERIAL|PRODUCTO` — resumen de stock de todos los items activos
+- `GET /stock?categoria=MATERIAL|PRODUCTO` — resumen de stock de todos los items activos, incluye `stockMinimo` y `bajoMinimo` por item (ver [Motor de stock](#motor-de-stock))
 - `GET /stock/:itemId` — `{ itemId, stock }` calculado en el momento
 
 **WhatsApp** (`/whatsapp`) — no aparece en Swagger (`@ApiExcludeController`), no usa JWT
@@ -452,13 +505,24 @@ Piezas del módulo `auth` (ver [Autenticación](#autenticación) para el comport
 
 - Modelo `User` en `schema.prisma` (`email` unique, `passwordHash`, nunca la contraseña en texto plano).
 - `src/users`: `UsersRepository`/`UsersService` internos, **sin** `Controller` — no hace falta un CRUD público de usuarios para una sola cuenta dueño.
-- `src/auth/auth.service.ts`: `validateUser` compara con `bcrypt.compare`; `login` firma un JWT con `{ sub: user.id, email }` vía `JwtService`.
+- `src/auth/auth.service.ts`: `validateUser` compara con `bcrypt.compare`; `login` firma un JWT con `{ sub: user.id, email, negocioId }` vía `JwtService`.
 - `src/auth/strategies/jwt.strategy.ts`: valida el token entrante y carga el usuario real (rechaza si está inactivo).
 - `src/auth/guards/jwt-auth.guard.ts` registrado como `APP_GUARD` global en `app.module.ts` — **toda ruta nueva queda protegida por default**. Para una ruta pública, decorarla con `@Public()` (el guard usa `Reflector` para detectar la metadata).
-- El seed (`prisma/seed.ts`) crea la cuenta inicial leyendo `OWNER_EMAIL`/`OWNER_PASSWORD`/`OWNER_NOMBRE` de `.env` — nunca hardcodear credenciales reales en un archivo versionado.
+- El seed (`prisma/seed.ts`) crea el negocio y la cuenta inicial leyendo `OWNER_NEGOCIO_NOMBRE`/`OWNER_EMAIL`/`OWNER_PASSWORD`/`OWNER_NOMBRE` de `.env` — nunca hardcodear credenciales reales en un archivo versionado.
 - `DocumentBuilder().addBearerAuth()` en `main.ts` + `@ApiBearerAuth()` en cada controller protegido para que el botón "Authorize" de Swagger UI funcione.
 
-### 12. Bot de WhatsApp
+### 12. Multi-tenancy
+
+Para escalar de "un negocio" a "muchos negocios" (SaaS), sin cambiar de base de datos ni de infraestructura:
+
+- Modelo `Negocio` en `schema.prisma`, y una columna `negocioId String` + relación en cada tabla de negocio (`Item`, `Operario`, `Movimiento`, `OrdenProduccion`, `User`) + `@@index([negocioId])`. Los unique compuestos que antes eran `(nombre, colorNombre)` pasan a `(negocioId, nombre, colorNombre)`.
+- **Regla de diseño clave**: todo método de `Repository`/`Service` recibe `negocioId` como primer parámetro obligatorio — así TypeScript impide compilar una query que se olvide de filtrar por tenant (ver [Multi-tenancy](#multi-tenancy)).
+- `JwtPayload` y `AuthenticatedUser` suman `negocioId` (y `esSuperAdmin` si se quiere un rol de plataforma); `login()` lo incluye en el JWT firmado.
+- Migrar datos existentes de un proyecto de un solo negocio: no usar `prisma migrate dev` para el paso que agrega `negocioId NOT NULL` a una tabla con filas — falla de forma no interactiva porque no sabe qué valor default poner. Escribir la migración a mano: agregar la columna como nullable, hacer `UPDATE` con el id del negocio "legacy", después `ALTER COLUMN ... SET NOT NULL`. Aplicar con `npx prisma migrate resolve --rolled-back <nombre>` (si `migrate dev` ya la había marcado como fallida) seguido de `npx prisma migrate deploy`.
+- Módulo `admin` nuevo, con un `SuperAdminGuard` propio (chequea `request.user.esSuperAdmin`) y `POST /admin/negocios` para dar de alta un tenant + su primer usuario en una transacción (ver [Alta de negocios](#alta-de-negocios-admin)).
+- El bot de WhatsApp deja de comparar contra un número fijo en `.env` y pasa a resolver el `negocioId` buscando el `From` entrante contra `User.whatsappNumber` — así el mismo webhook atiende a todos los tenants.
+
+### 13. Bot de WhatsApp
 
 ```bash
 npm install twilio
@@ -467,7 +531,7 @@ npm install twilio
 Piezas de `src/whatsapp` (ver [Bot de WhatsApp](#bot-de-whatsapp) para el detalle):
 
 - `@Body() body: Record<string, string>` en vez de un DTO en el controller del webhook — Twilio manda ~20 campos que no controlamos, y un DTO con `forbidNonWhitelisted: true` rechazaría el request entero.
-- Autorización por número de teléfono (`OWNER_WHATSAPP_NUMBER`), no por JWT — el `@Public()` del guard global se usa para exceptuar esta ruta, igual que `/auth/login`.
+- Autorización y resolución de tenant por número de teléfono (`User.whatsappNumber`), no por JWT — el `@Public()` del guard global se usa para exceptuar esta ruta, igual que `/auth/login`.
 - Máquina de estados en memoria (`SessionStoreService`) para trackear en qué paso de la conversación está cada número — WhatsApp no tiene sesión, cada mensaje es un webhook independiente.
 - `ConversationService` llama directo a los `Service` de negocio ya existentes (`MovimientosService`, `OrdenesProduccionService`, `StockService`, ...) — la capa conversacional no reimplementa ninguna regla, solo la envuelve en preguntas/respuestas de texto.
 - El envío de la respuesta es una llamada aparte a la API REST de Twilio (`client.messages.create`), envuelta en `try/catch` para que un fallo de Twilio no tire un 500 al webhook.
@@ -479,6 +543,6 @@ Este proyecto está armado para ser un punto de partida reusable. Para clonarlo 
 1. **Renombrar el dominio de "persona que mueve stock"** si `Operario` no encaja (ej. `Vendedor`, `Encargado`): renombrar modelo en `schema.prisma`, correr `prisma migrate dev`, y renombrar el módulo (`grep -rl "Operario\|operario" src` para ubicar todos los puntos).
 2. **Ajustar `Categoria`, `Unidad` y `MovimientoTipo`** en el enum de `schema.prisma` según el negocio — son la única parte realmente específica de "muñecos de tela". El resto (Controller/Service/Repository, motor de stock, validaciones) es genérico.
 3. **Revisar la lista `TIPOS_SALIDA`** en `src/stock/stock.service.ts` y `src/movimientos/movimientos.service.ts` si se agregan o quitan tipos de movimiento — es la fuente de verdad sobre qué tipo resta (todo lo que no es `TIPOS_SALIDA` ni `AJUSTE` suma).
-4. **Reemplazar `prisma/seed.ts`** por el catálogo real del nuevo negocio, manteniendo el patrón `upsertItem`/`upsert<Entidad>` idempotente.
-5. **Multi-tenant (vender esto a otros emprendedores)**: hoy todo el sistema asume un solo negocio — `OWNER_WHATSAPP_NUMBER` es un único número fijo en `.env`. Para SaaS real hace falta un modelo `Negocio`/`Cuenta` que scopee `Item`/`Operario`/`Movimiento`/`OrdenProduccion`, y reemplazar el check de número fijo por una tabla que mapee cada número de WhatsApp a su negocio. Es un cambio de fondo, no incremental — mejor encararlo como su propio sprint una vez validado el flujo de un solo negocio.
-5. **`docker-compose.yml` y `.env`**: cambiar `POSTGRES_DB`, nombre del contenedor y del volumen para que convivan varios proyectos de este tipo en la misma máquina sin pisarse.
+4. **Reemplazar `prisma/seed.ts`** por el catálogo real del nuevo negocio — pasarle el `negocioId` que devuelve `upsertNegocioYOwner()`, manteniendo el patrón `upsertItem`/`upsert<Entidad>` idempotente.
+5. **Multi-tenant**: ya no es trabajo pendiente — el sistema nació pensado para vender a múltiples emprendedores (ver [Multi-tenancy](#multi-tenancy)). Sumar un cliente nuevo no requiere tocar código, solo llamar `POST /admin/negocios` (ver [Alta de negocios](#alta-de-negocios-admin)).
+6. **`docker-compose.yml` y `.env`**: cambiar `POSTGRES_DB`, nombre del contenedor y del volumen para que convivan varios proyectos de este tipo en la misma máquina sin pisarse.

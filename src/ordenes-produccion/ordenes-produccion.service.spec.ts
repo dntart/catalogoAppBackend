@@ -11,6 +11,7 @@ import { OrdenesProduccionRepository } from './ordenes-produccion.repository';
 import { OperariosService } from '../operarios/operarios.service';
 import { ItemsService } from '../items/items.service';
 
+const NEGOCIO_ID = 'negocio-1';
 const OPERARIO_MOCK = { id: 'operario-1' } as Operario;
 const ORDEN_MOCK = {
   id: 'orden-1',
@@ -59,16 +60,16 @@ describe('OrdenesProduccionService', () => {
       new NotFoundException('no existe'),
     );
 
-    await expect(service.create({ operarioId: 'operario-x' })).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      service.create(NEGOCIO_ID, { operarioId: 'operario-x' }),
+    ).rejects.toThrow(NotFoundException);
     expect(repository.create).not.toHaveBeenCalled();
   });
 
   it('lanza NotFoundException si la orden no existe', async () => {
     repository.findById.mockResolvedValue(null);
 
-    await expect(service.findOne('no-existe')).rejects.toThrow(
+    await expect(service.findOne(NEGOCIO_ID, 'no-existe')).rejects.toThrow(
       NotFoundException,
     );
   });
@@ -82,7 +83,7 @@ describe('OrdenesProduccionService', () => {
       },
     ]);
 
-    const resumen = await service.getResumen('orden-1');
+    const resumen = await service.getResumen(NEGOCIO_ID, 'orden-1');
 
     expect(resumen).toEqual([
       {

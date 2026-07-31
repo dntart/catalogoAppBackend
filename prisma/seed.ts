@@ -20,17 +20,19 @@ const PRODUCTOS = [
 const OPERARIOS = ['María', 'Luján'];
 
 async function upsertItem(
+  negocioId: string,
   nombre: string,
   categoria: Categoria,
   unidad: Unidad,
   colorNombre: string | null,
 ): Promise<void> {
-  const existente = await prisma.item.findFirst({ where: { nombre, colorNombre } });
+  const existente = await prisma.item.findFirst({ where: { negocioId, nombre, colorNombre } });
   if (existente) {
     return;
   }
   await prisma.item.create({
     data: {
+      negocioId,
       nombre,
       categoria,
       unidad,
@@ -40,18 +42,25 @@ async function upsertItem(
   });
 }
 
-async function upsertOperario(nombre: string): Promise<void> {
-  const existente = await prisma.operario.findFirst({ where: { nombre } });
+async function upsertOperario(negocioId: string, nombre: string): Promise<void> {
+  const existente = await prisma.operario.findFirst({ where: { negocioId, nombre } });
   if (existente) {
     return;
   }
-  await prisma.operario.create({ data: { nombre } });
+  await prisma.operario.create({ data: { negocioId, nombre } });
 }
 
-async function upsertOwnerUser(): Promise<void> {
+/**
+ * Crea (si no existe) el negocio del fundador del SaaS y su usuario dueño,
+ * marcado como super-admin para poder dar de alta negocios de otros clientes
+ * desde POST /admin/negocios.
+ */
+async function upsertNegocioYOwner(): Promise<string> {
+  const nombreNegocio = process.env.OWNER_NEGOCIO_NOMBRE ?? 'Fauna de Tela';
   const email = process.env.OWNER_EMAIL;
   const password = process.env.OWNER_PASSWORD;
   const nombre = process.env.OWNER_NOMBRE ?? 'Dueño';
+  const whatsappNumber = process.env.OWNER_WHATSAPP_NUMBER;
 
   if (!email || !password) {
     throw new Error(
@@ -61,31 +70,43 @@ async function upsertOwnerUser(): Promise<void> {
 
   const existente = await prisma.user.findUnique({ where: { email } });
   if (existente) {
-    return;
+    return existente.negocioId;
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  await prisma.user.create({ data: { email, passwordHash, nombre } });
+  const negocio = await prisma.negocio.create({ data: { nombre: nombreNegocio } });
+  await prisma.user.create({
+    data: {
+      negocioId: negocio.id,
+      email,
+      passwordHash,
+      nombre,
+      whatsappNumber,
+      esSuperAdmin: true,
+    },
+  });
+
+  return negocio.id;
 }
 
 async function main(): Promise<void> {
-  await upsertOwnerUser();
+  const negocioId = await upsertNegocioYOwner();
 
   for (const nombre of PRODUCTOS) {
-    await upsertItem(nombre, Categoria.PRODUCTO, Unidad.UNIDAD, null);
+    await upsertItem(negocioId, nombre, Categoria.PRODUCTO, Unidad.UNIDAD, null);
   }
 
   for (const color of COLORES_ESTANDAR) {
-    await upsertItem('Gabardina', Categoria.MATERIAL, Unidad.METRO, color);
-    await upsertItem('Corderoy', Categoria.MATERIAL, Unidad.METRO, color);
-    await upsertItem('Hilo Poliéster', Categoria.MATERIAL, Unidad.CONO, color);
+    await upsertItem(negocioId, 'Gabardina', Categoria.MATERIAL, Unidad.METRO, color);
+    await upsertItem(negocioId, 'Corderoy', Categoria.MATERIAL, Unidad.METRO, color);
+    await upsertItem(negocioId, 'Hilo Poliéster', Categoria.MATERIAL, Unidad.CONO, color);
   }
-  await upsertItem('Hilo Poliéster', Categoria.MATERIAL, Unidad.CONO, 'Blanco');
+  await upsertItem(negocioId, 'Hilo Poliéster', Categoria.MATERIAL, Unidad.CONO, 'Blanco');
 
-  await upsertItem('Vellón', Categoria.MATERIAL, Unidad.KG, null);
+  await upsertItem(negocioId, 'Vellón', Categoria.MATERIAL, Unidad.KG, null);
 
   for (const nombre of OPERARIOS) {
-    await upsertOperario(nombre);
+    await upsertOperario(negocioId, nombre);
   }
 }
 

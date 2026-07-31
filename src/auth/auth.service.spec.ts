@@ -8,9 +8,12 @@ import { JwtService } from '@nestjs/jwt';
 async function buildUser(overrides: Partial<User> = {}): Promise<User> {
   return {
     id: 'user-1',
+    negocioId: 'negocio-1',
     email: 'dueño@faunadetela.com',
     passwordHash: await bcrypt.hash('contraseña-correcta', 10),
     nombre: 'Dueño',
+    whatsappNumber: null,
+    esSuperAdmin: false,
     activo: true,
     createdAt: new Date(),
     ...overrides,
@@ -43,8 +46,11 @@ describe('AuthService', () => {
 
       expect(resultado).toEqual({
         id: user.id,
+        negocioId: user.negocioId,
         email: user.email,
         nombre: user.nombre,
+        whatsappNumber: user.whatsappNumber,
+        esSuperAdmin: user.esSuperAdmin,
         activo: user.activo,
         createdAt: user.createdAt,
       });
@@ -79,7 +85,7 @@ describe('AuthService', () => {
   });
 
   describe('login', () => {
-    it('devuelve un accessToken firmado con el id y email del usuario', async () => {
+    it('devuelve un accessToken firmado con el id, email y negocioId del usuario', async () => {
       const user = await buildUser();
       usersService.findByEmail.mockResolvedValue(user);
       jwtService.signAsync.mockResolvedValue('token-firmado');
@@ -92,6 +98,7 @@ describe('AuthService', () => {
       expect(jwtService.signAsync).toHaveBeenCalledWith({
         sub: user.id,
         email: user.email,
+        negocioId: user.negocioId,
       });
       expect(resultado).toEqual({ accessToken: 'token-firmado' });
     });

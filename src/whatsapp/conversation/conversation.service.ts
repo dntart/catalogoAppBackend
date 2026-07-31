@@ -100,6 +100,7 @@ export class ConversationService {
   ) {}
 
   async manejarMensaje(
+    negocioId: string,
     telefono: string,
     textoOriginal: string,
   ): Promise<string> {
@@ -121,9 +122,10 @@ export class ConversationService {
     try {
       switch (session.step) {
         case FlowStep.MENU:
-          return await this.manejarMenu(telefono, texto, session);
+          return await this.manejarMenu(negocioId, telefono, texto, session);
         case FlowStep.SELECCION_ITEM_NOMBRE:
           return await this.manejarSeleccionItemNombre(
+            negocioId,
             telefono,
             texto,
             session,
@@ -131,23 +133,48 @@ export class ConversationService {
         case FlowStep.SELECCION_ITEM_COLOR:
           return this.manejarSeleccionItemColor(telefono, texto, session);
         case FlowStep.COMPRA_CANTIDAD:
-          return await this.prepararCompra(telefono, texto, session);
+          return await this.prepararCompra(negocioId, telefono, texto, session);
         case FlowStep.ENTREGA_OPERARIO:
-          return await this.manejarEntregaOperario(telefono, texto, session);
+          return await this.manejarEntregaOperario(
+            negocioId,
+            telefono,
+            texto,
+            session,
+          );
         case FlowStep.ENTREGA_CANTIDAD:
-          return await this.prepararEntrega(telefono, texto, session);
+          return await this.prepararEntrega(
+            negocioId,
+            telefono,
+            texto,
+            session,
+          );
         case FlowStep.RECEPCION_OPERARIO:
-          return await this.manejarRecepcionOperario(telefono, texto, session);
+          return await this.manejarRecepcionOperario(
+            negocioId,
+            telefono,
+            texto,
+            session,
+          );
         case FlowStep.RECEPCION_ORDEN:
-          return await this.manejarRecepcionOrden(telefono, texto, session);
+          return await this.manejarRecepcionOrden(
+            negocioId,
+            telefono,
+            texto,
+            session,
+          );
         case FlowStep.RECEPCION_CANTIDAD:
-          return await this.prepararRecepcion(telefono, texto, session);
+          return await this.prepararRecepcion(
+            negocioId,
+            telefono,
+            texto,
+            session,
+          );
         case FlowStep.VENTA_CANTIDAD:
-          return await this.prepararVenta(telefono, texto, session);
+          return await this.prepararVenta(negocioId, telefono, texto, session);
         case FlowStep.AJUSTE_CANTIDAD:
-          return await this.prepararAjuste(telefono, texto, session);
+          return await this.prepararAjuste(negocioId, telefono, texto, session);
         case FlowStep.STOCK_CATEGORIA:
-          return await this.finalizarStock(telefono, texto);
+          return await this.finalizarStock(negocioId, telefono, texto);
         case FlowStep.NUEVA_OPERARIA_NOMBRE:
           return this.prepararNuevaOperaria(telefono, texto, session);
         case FlowStep.NUEVO_ITEM_CATEGORIA:
@@ -161,7 +188,12 @@ export class ConversationService {
         case FlowStep.NUEVO_ITEM_COLOR:
           return this.prepararNuevoItemConColor(telefono, texto, session);
         case FlowStep.CONFIRMAR:
-          return await this.manejarConfirmacion(telefono, texto, session);
+          return await this.manejarConfirmacion(
+            negocioId,
+            telefono,
+            texto,
+            session,
+          );
         default:
           this.sessionStore.reiniciar(telefono);
           return MENSAJE_MENU;
@@ -184,6 +216,7 @@ export class ConversationService {
   }
 
   private async manejarMenu(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -191,6 +224,7 @@ export class ConversationService {
     switch (texto.trim()) {
       case '1':
         return this.pedirItem(
+          negocioId,
           session,
           Categoria.MATERIAL,
           FlowStep.COMPRA_CANTIDAD,
@@ -198,18 +232,21 @@ export class ConversationService {
         );
       case '2':
         return this.pedirOperario(
+          negocioId,
           session,
           FlowStep.ENTREGA_OPERARIO,
           '¿A qué operaria le entregás material?',
         );
       case '3':
         return this.pedirOperario(
+          negocioId,
           session,
           FlowStep.RECEPCION_OPERARIO,
           '¿Qué operaria trae el producto terminado?',
         );
       case '4':
         return this.pedirItem(
+          negocioId,
           session,
           Categoria.PRODUCTO,
           FlowStep.VENTA_CANTIDAD,
@@ -217,6 +254,7 @@ export class ConversationService {
         );
       case '5':
         return this.pedirItem(
+          negocioId,
           session,
           undefined,
           FlowStep.AJUSTE_CANTIDAD,
@@ -241,19 +279,20 @@ export class ConversationService {
         return '¿Es un material o un producto?\n1. Material\n2. Producto';
       }
       case '9':
-        return this.mostrarUltimosMovimientos(telefono);
+        return this.mostrarUltimosMovimientos(negocioId, telefono);
       default:
         return `No entendí esa opción.\n\n${MENSAJE_MENU}`;
     }
   }
 
   private async pedirItem(
+    negocioId: string,
     session: WhatsappSession,
     categoria: Categoria | undefined,
     siguienteStep: FlowStep,
     pregunta: string,
   ): Promise<string> {
-    const items = await this.itemsService.findAll(true);
+    const items = await this.itemsService.findAll(negocioId, true);
     const filtrados = categoria
       ? items.filter((item) => item.categoria === categoria)
       : items;
@@ -279,6 +318,7 @@ export class ConversationService {
   }
 
   private async manejarSeleccionItemNombre(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -289,7 +329,7 @@ export class ConversationService {
     }
 
     const contexto = session.contextoItem!;
-    const items = await this.itemsService.findAll(true);
+    const items = await this.itemsService.findAll(negocioId, true);
     const coincidencias = items.filter(
       (item) =>
         item.nombre === seleccion.etiqueta &&
@@ -331,11 +371,12 @@ export class ConversationService {
   }
 
   private async pedirOperario(
+    negocioId: string,
     session: WhatsappSession,
     siguienteStep: FlowStep,
     pregunta: string,
   ): Promise<string> {
-    const operarios = await this.operariosService.findAll(true);
+    const operarios = await this.operariosService.findAll(negocioId, true);
     const opciones: OpcionListado[] = operarios.map((op) => ({
       id: op.id,
       etiqueta: op.nombre,
@@ -362,6 +403,7 @@ export class ConversationService {
   }
 
   private async prepararCompra(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -371,7 +413,7 @@ export class ConversationService {
       return 'Ingresá un número mayor a cero para la cantidad.';
     }
 
-    const item = await this.itemsService.findOne(session.itemId!);
+    const item = await this.itemsService.findOne(negocioId, session.itemId!);
     return this.pedirConfirmacion(
       telefono,
       session,
@@ -385,6 +427,7 @@ export class ConversationService {
   }
 
   private async manejarEntregaOperario(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -396,6 +439,7 @@ export class ConversationService {
     session.operarioId = seleccion.id;
     this.sessionStore.guardar(telefono, session);
     return this.pedirItem(
+      negocioId,
       session,
       Categoria.MATERIAL,
       FlowStep.ENTREGA_CANTIDAD,
@@ -404,6 +448,7 @@ export class ConversationService {
   }
 
   private async prepararEntrega(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -413,8 +458,11 @@ export class ConversationService {
       return 'Ingresá un número mayor a cero para la cantidad.';
     }
 
-    const item = await this.itemsService.findOne(session.itemId!);
-    const operario = await this.operariosService.findOne(session.operarioId!);
+    const item = await this.itemsService.findOne(negocioId, session.itemId!);
+    const operario = await this.operariosService.findOne(
+      negocioId,
+      session.operarioId!,
+    );
 
     return this.pedirConfirmacion(
       telefono,
@@ -431,6 +479,7 @@ export class ConversationService {
   }
 
   private async manejarRecepcionOperario(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -441,10 +490,14 @@ export class ConversationService {
     }
     session.operarioId = seleccion.id;
 
-    const ordenes = await this.ordenesProduccionService.findAll(seleccion.id);
+    const ordenes = await this.ordenesProduccionService.findAll(
+      negocioId,
+      seleccion.id,
+    );
     if (ordenes.length === 0) {
       this.sessionStore.guardar(telefono, session);
       return this.pedirItem(
+        negocioId,
         session,
         Categoria.PRODUCTO,
         FlowStep.RECEPCION_CANTIDAD,
@@ -454,7 +507,7 @@ export class ConversationService {
 
     const ordenesRecientes = ordenes.slice(0, 5);
     const etiquetas = await Promise.all(
-      ordenesRecientes.map((orden) => this.etiquetaOrden(orden)),
+      ordenesRecientes.map((orden) => this.etiquetaOrden(negocioId, orden)),
     );
     const opciones: OpcionListado[] = [
       { id: null, etiqueta: 'Sin vincular a ninguna entrega' },
@@ -470,9 +523,15 @@ export class ConversationService {
     return `¿A qué entrega corresponde este producto?\n${construirListado(opciones)}`;
   }
 
-  private async etiquetaOrden(orden: OrdenProduccion): Promise<string> {
+  private async etiquetaOrden(
+    negocioId: string,
+    orden: OrdenProduccion,
+  ): Promise<string> {
     const fecha = new Date(orden.fecha).toLocaleDateString();
-    const detalle = await this.ordenesProduccionService.findOne(orden.id);
+    const detalle = await this.ordenesProduccionService.findOne(
+      negocioId,
+      orden.id,
+    );
     const consumos = detalle.movimientos.filter(
       (m) => m.tipo === MovimientoTipo.CONSUMO,
     );
@@ -491,6 +550,7 @@ export class ConversationService {
   }
 
   private async manejarRecepcionOrden(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -507,6 +567,7 @@ export class ConversationService {
     this.sessionStore.guardar(telefono, session);
 
     return this.pedirItem(
+      negocioId,
       session,
       Categoria.PRODUCTO,
       FlowStep.RECEPCION_CANTIDAD,
@@ -515,6 +576,7 @@ export class ConversationService {
   }
 
   private async prepararRecepcion(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -524,8 +586,11 @@ export class ConversationService {
       return 'Ingresá un número mayor a cero para la cantidad.';
     }
 
-    const item = await this.itemsService.findOne(session.itemId!);
-    const operario = await this.operariosService.findOne(session.operarioId!);
+    const item = await this.itemsService.findOne(negocioId, session.itemId!);
+    const operario = await this.operariosService.findOne(
+      negocioId,
+      session.operarioId!,
+    );
 
     return this.pedirConfirmacion(
       telefono,
@@ -546,6 +611,7 @@ export class ConversationService {
   }
 
   private async prepararVenta(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -555,7 +621,7 @@ export class ConversationService {
       return 'Ingresá un número mayor a cero para la cantidad.';
     }
 
-    const item = await this.itemsService.findOne(session.itemId!);
+    const item = await this.itemsService.findOne(negocioId, session.itemId!);
     return this.pedirConfirmacion(
       telefono,
       session,
@@ -569,6 +635,7 @@ export class ConversationService {
   }
 
   private async prepararAjuste(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -578,7 +645,7 @@ export class ConversationService {
       return 'Ingresá un número distinto de cero (puede ser negativo, ej: -2).';
     }
 
-    const item = await this.itemsService.findOne(session.itemId!);
+    const item = await this.itemsService.findOne(negocioId, session.itemId!);
     return this.pedirConfirmacion(
       telefono,
       session,
@@ -592,6 +659,7 @@ export class ConversationService {
   }
 
   private async finalizarStock(
+    negocioId: string,
     telefono: string,
     texto: string,
   ): Promise<string> {
@@ -606,6 +674,7 @@ export class ConversationService {
     }
 
     const resumen = await this.stockService.getResumen(
+      negocioId,
       categoriaPorOpcion[opcion],
     );
     this.sessionStore.reiniciar(telefono);
@@ -615,13 +684,19 @@ export class ConversationService {
     }
 
     const lineas = resumen
-      .map((r) => `• ${r.nombre}: ${r.stock} ${r.unidad.toLowerCase()}`)
+      .map(
+        (r) =>
+          `${r.bajoMinimo ? '⚠️' : '•'} ${r.nombre}: ${r.stock} ${r.unidad.toLowerCase()}`,
+      )
       .join('\n');
     return `📦 *Stock actual*\n${lineas}\n\n${MENSAJE_MENU}`;
   }
 
-  private async mostrarUltimosMovimientos(telefono: string): Promise<string> {
-    const movimientos = await this.movimientosService.findAll();
+  private async mostrarUltimosMovimientos(
+    negocioId: string,
+    telefono: string,
+  ): Promise<string> {
+    const movimientos = await this.movimientosService.findAll(negocioId);
     this.sessionStore.reiniciar(telefono);
 
     if (movimientos.length === 0) {
@@ -777,6 +852,7 @@ export class ConversationService {
   }
 
   private async manejarConfirmacion(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
@@ -798,15 +874,15 @@ export class ConversationService {
 
     switch (accion.tipoAccion) {
       case 'MOVIMIENTO':
-        return this.ejecutarMovimientoPendiente(accion);
+        return this.ejecutarMovimientoPendiente(negocioId, accion);
       case 'OPERARIA': {
-        const operaria = await this.operariosService.create({
+        const operaria = await this.operariosService.create(negocioId, {
           nombre: accion.nombre,
         });
         return `✅ Operaria agregada: ${operaria.nombre}.\n\n${MENSAJE_MENU}`;
       }
       case 'ITEM': {
-        const item = await this.itemsService.create({
+        const item = await this.itemsService.create(negocioId, {
           nombre: accion.nombre,
           categoria: accion.categoria,
           unidad: accion.unidad,
@@ -819,19 +895,20 @@ export class ConversationService {
   }
 
   private async ejecutarMovimientoPendiente(
+    negocioId: string,
     accion: AccionMovimientoPendiente,
   ): Promise<string> {
     let payload = accion.payload;
     if (accion.crearOrdenParaOperario) {
-      const orden = await this.ordenesProduccionService.create({
+      const orden = await this.ordenesProduccionService.create(negocioId, {
         operarioId: accion.crearOrdenParaOperario,
         observaciones: 'Entrega registrada por WhatsApp',
       });
       payload = { ...payload, ordenProduccionId: orden.id };
     }
 
-    await this.movimientosService.create(payload);
-    const stock = await this.stockService.getStock(payload.itemId);
+    await this.movimientosService.create(negocioId, payload);
+    const stock = await this.stockService.getStock(negocioId, payload.itemId);
 
     return `✅ Registrado: ${accion.payload.cantidad} de ${accion.etiquetaItem}.\nStock actual: ${stock}${accion.mensajeExtra ?? ''}\n\n${MENSAJE_MENU}`;
   }

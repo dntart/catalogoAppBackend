@@ -27,8 +27,14 @@ export class StockService {
     private readonly itemsService: ItemsService,
   ) {}
 
-  async getStockDecimal(itemId: string): Promise<Prisma.Decimal> {
-    const grupos = await this.stockRepository.sumarCantidadesPorTipo(itemId);
+  async getStockDecimal(
+    negocioId: string,
+    itemId: string,
+  ): Promise<Prisma.Decimal> {
+    const grupos = await this.stockRepository.sumarCantidadesPorTipo(
+      negocioId,
+      itemId,
+    );
 
     return grupos.reduce(
       (stock, grupo) =>
@@ -42,20 +48,21 @@ export class StockService {
     );
   }
 
-  async getStock(itemId: string): Promise<number> {
-    const stock = await this.getStockDecimal(itemId);
+  async getStock(negocioId: string, itemId: string): Promise<number> {
+    const stock = await this.getStockDecimal(negocioId, itemId);
     return stock.toNumber();
   }
 
   async validarStockSuficiente(
+    negocioId: string,
     itemId: string,
     cantidad: number,
   ): Promise<void> {
-    const stockActual = await this.getStockDecimal(itemId);
+    const stockActual = await this.getStockDecimal(negocioId, itemId);
     const stockResultante = stockActual.minus(cantidad);
 
     if (stockResultante.isNegative()) {
-      const item = await this.itemsService.findOne(itemId);
+      const item = await this.itemsService.findOne(negocioId, itemId);
       const nombre = item.colorNombre
         ? `${item.nombre} ${item.colorNombre}`
         : item.nombre;
@@ -65,13 +72,17 @@ export class StockService {
     }
   }
 
-  async getResumen(categoria?: Categoria): Promise<ResumenStockItemEntity[]> {
-    const items = await this.itemsService.findAll(true);
+  async getResumen(
+    negocioId: string,
+    categoria?: Categoria,
+  ): Promise<ResumenStockItemEntity[]> {
+    const items = await this.itemsService.findAll(negocioId, true);
     const itemsFiltrados = categoria
       ? items.filter((item) => item.categoria === categoria)
       : items;
 
-    const grupos = await this.stockRepository.sumarCantidadesPorItemGlobal();
+    const grupos =
+      await this.stockRepository.sumarCantidadesPorItemGlobal(negocioId);
     const stockPorItem = new Map<string, Prisma.Decimal>();
     for (const grupo of grupos) {
       const delta = calcularDelta(
@@ -84,14 +95,20 @@ export class StockService {
       );
     }
 
-    return itemsFiltrados.map((item) => ({
-      itemId: item.id,
-      nombre: item.colorNombre
-        ? `${item.nombre} ${item.colorNombre}`
-        : item.nombre,
-      categoria: item.categoria,
-      unidad: item.unidad,
-      stock: (stockPorItem.get(item.id) ?? new Prisma.Decimal(0)).toNumber(),
-    }));
+    return itemsFiltrados.map((item) => {
+      const stock = stockPorItem.get(item.id) ?? new Prisma.Decimal(0);
+      const stockMinimo = item.stockMinimo ? item.stockMinimo.toNumber() : null;
+      return {
+        itemId: item.id,
+        nombre: item.colorNombre
+          ? `${item.nombre} ${item.colorNombre}`
+          : item.nombre,
+        categoria: item.categoria,
+        unidad: item.unidad,
+        stock: stock.toNumber(),
+        stockMinimo,
+        bajoMinimo: stockMinimo !== null && stock.toNumber() <= stockMinimo,
+      };
+    });
   }
 }

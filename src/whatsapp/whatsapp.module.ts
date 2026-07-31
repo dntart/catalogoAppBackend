@@ -8,6 +8,7 @@ import { OperariosModule } from '../operarios/operarios.module';
 import { MovimientosModule } from '../movimientos/movimientos.module';
 import { OrdenesProduccionModule } from '../ordenes-produccion/ordenes-produccion.module';
 import { StockModule } from '../stock/stock.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { StockModule } from '../stock/stock.module';
     MovimientosModule,
     OrdenesProduccionModule,
     StockModule,
+    UsersModule,
   ],
   controllers: [WhatsappController],
   providers: [WhatsappService, ConversationService, SessionStoreService],

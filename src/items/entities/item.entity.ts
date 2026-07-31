@@ -23,6 +23,9 @@ export class ItemEntity {
   @ApiPropertyOptional({ nullable: true })
   imagenUrl!: string | null;
 
+  @ApiPropertyOptional({ nullable: true, example: '5' })
+  stockMinimo!: string | null;
+
   @ApiProperty()
   activo!: boolean;
 

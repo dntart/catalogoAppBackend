@@ -41,3 +41,6 @@ lerna-debug.log*
 
 # Prisma generated client (regenerated via `npx prisma generate`)
 /generated/prisma
+
+# Claude Code personal settings (not shared with the team)
+.claude/settings.local.json

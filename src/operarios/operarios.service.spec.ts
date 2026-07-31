@@ -3,6 +3,7 @@ import { Operario } from '@prisma/client';
 import { OperariosService } from './operarios.service';
 import { OperariosRepository } from './operarios.repository';
 
+const NEGOCIO_ID = 'negocio-1';
 const OPERARIO_MOCK = { id: 'operario-1', nombre: 'María' } as Operario;
 
 describe('OperariosService', () => {
@@ -29,15 +30,17 @@ describe('OperariosService', () => {
   it('crea un operario', async () => {
     repository.create.mockResolvedValue(OPERARIO_MOCK);
 
-    await service.create({ nombre: 'María' });
+    await service.create(NEGOCIO_ID, { nombre: 'María' });
 
-    expect(repository.create).toHaveBeenCalledWith({ nombre: 'María' });
+    expect(repository.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      nombre: 'María',
+    });
   });
 
   it('lanza NotFoundException si el operario no existe', async () => {
     repository.findById.mockResolvedValue(null);
 
-    await expect(service.findOne('no-existe')).rejects.toThrow(
+    await expect(service.findOne(NEGOCIO_ID, 'no-existe')).rejects.toThrow(
       NotFoundException,
     );
   });
@@ -45,14 +48,16 @@ describe('OperariosService', () => {
   it('devuelve el operario cuando existe', async () => {
     repository.findById.mockResolvedValue(OPERARIO_MOCK);
 
-    await expect(service.findOne('operario-1')).resolves.toEqual(OPERARIO_MOCK);
+    await expect(service.findOne(NEGOCIO_ID, 'operario-1')).resolves.toEqual(
+      OPERARIO_MOCK,
+    );
   });
 
   it('update verifica existencia antes de actualizar', async () => {
     repository.findById.mockResolvedValue(OPERARIO_MOCK);
     repository.update.mockResolvedValue(OPERARIO_MOCK);
 
-    await service.update('operario-1', { activo: false });
+    await service.update(NEGOCIO_ID, 'operario-1', { activo: false });
 
     expect(repository.update).toHaveBeenCalledWith('operario-1', {
       activo: false,
@@ -63,7 +68,7 @@ describe('OperariosService', () => {
     repository.findById.mockResolvedValue(null);
 
     await expect(
-      service.update('no-existe', { activo: false }),
+      service.update(NEGOCIO_ID, 'no-existe', { activo: false }),
     ).rejects.toThrow(NotFoundException);
     expect(repository.update).not.toHaveBeenCalled();
   });

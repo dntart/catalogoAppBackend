@@ -10,32 +10,41 @@ type OrdenProduccionConMovimientos = OrdenProduccion & {
 export class OrdenesProduccionRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(data: Prisma.OrdenProduccionCreateInput): Promise<OrdenProduccion> {
-    return this.prisma.ordenProduccion.create({ data });
+  create(
+    negocioId: string,
+    data: Omit<Prisma.OrdenProduccionCreateInput, 'negocio'>,
+  ): Promise<OrdenProduccion> {
+    return this.prisma.ordenProduccion.create({
+      data: { ...data, negocio: { connect: { id: negocioId } } },
+    });
   }
 
   findAll(
-    where?: Prisma.OrdenProduccionWhereInput,
+    negocioId: string,
+    where?: Omit<Prisma.OrdenProduccionWhereInput, 'negocioId'>,
   ): Promise<OrdenProduccion[]> {
     return this.prisma.ordenProduccion.findMany({
-      where,
+      where: { ...where, negocioId },
       orderBy: { fecha: 'desc' },
     });
   }
 
-  findById(id: string): Promise<OrdenProduccionConMovimientos | null> {
-    return this.prisma.ordenProduccion.findUnique({
-      where: { id },
+  findById(
+    negocioId: string,
+    id: string,
+  ): Promise<OrdenProduccionConMovimientos | null> {
+    return this.prisma.ordenProduccion.findFirst({
+      where: { id, negocioId },
       include: {
         movimientos: { include: { item: true }, orderBy: { fecha: 'asc' } },
       },
     });
   }
 
-  sumarCantidadesPorItem(ordenProduccionId: string) {
+  sumarCantidadesPorItem(negocioId: string, ordenProduccionId: string) {
     return this.prisma.movimiento.groupBy({
       by: ['itemId', 'tipo'],
-      where: { ordenProduccionId },
+      where: { ordenProduccionId, negocioId },
       _sum: { cantidad: true },
     });
   }

@@ -8,26 +8,31 @@ import { UpdateOperarioDto } from './dto/update-operario.dto';
 export class OperariosService {
   constructor(private readonly operariosRepository: OperariosRepository) {}
 
-  create(dto: CreateOperarioDto): Promise<Operario> {
-    return this.operariosRepository.create({ nombre: dto.nombre });
+  create(negocioId: string, dto: CreateOperarioDto): Promise<Operario> {
+    return this.operariosRepository.create(negocioId, { nombre: dto.nombre });
   }
 
-  findAll(activo?: boolean): Promise<Operario[]> {
+  findAll(negocioId: string, activo?: boolean): Promise<Operario[]> {
     return this.operariosRepository.findAll(
+      negocioId,
       activo === undefined ? undefined : { activo },
     );
   }
 
-  async findOne(id: string): Promise<Operario> {
-    const operario = await this.operariosRepository.findById(id);
+  async findOne(negocioId: string, id: string): Promise<Operario> {
+    const operario = await this.operariosRepository.findById(negocioId, id);
     if (!operario) {
       throw new NotFoundException(`Operario ${id} no encontrado`);
     }
     return operario;
   }
 
-  async update(id: string, dto: UpdateOperarioDto): Promise<Operario> {
-    await this.findOne(id);
+  async update(
+    negocioId: string,
+    id: string,
+    dto: UpdateOperarioDto,
+  ): Promise<Operario> {
+    await this.findOne(negocioId, id);
     return this.operariosRepository.update(id, dto);
   }
 }

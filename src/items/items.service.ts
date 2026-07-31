@@ -8,33 +8,39 @@ import { UpdateItemDto } from './dto/update-item.dto';
 export class ItemsService {
   constructor(private readonly itemsRepository: ItemsRepository) {}
 
-  create(dto: CreateItemDto): Promise<Item> {
-    return this.itemsRepository.create({
+  create(negocioId: string, dto: CreateItemDto): Promise<Item> {
+    return this.itemsRepository.create(negocioId, {
       nombre: dto.nombre,
       categoria: dto.categoria,
       unidad: dto.unidad,
       tieneColor: dto.tieneColor,
       colorNombre: dto.tieneColor ? (dto.colorNombre ?? null) : null,
       imagenUrl: dto.imagenUrl,
+      stockMinimo: dto.stockMinimo,
     });
   }
 
-  findAll(activo?: boolean): Promise<Item[]> {
+  findAll(negocioId: string, activo?: boolean): Promise<Item[]> {
     return this.itemsRepository.findAll(
+      negocioId,
       activo === undefined ? undefined : { activo },
     );
   }
 
-  async findOne(id: string): Promise<Item> {
-    const item = await this.itemsRepository.findById(id);
+  async findOne(negocioId: string, id: string): Promise<Item> {
+    const item = await this.itemsRepository.findById(negocioId, id);
     if (!item) {
       throw new NotFoundException(`Item ${id} no encontrado`);
     }
     return item;
   }
 
-  async update(id: string, dto: UpdateItemDto): Promise<Item> {
-    await this.findOne(id);
+  async update(
+    negocioId: string,
+    id: string,
+    dto: UpdateItemDto,
+  ): Promise<Item> {
+    await this.findOne(negocioId, id);
     return this.itemsRepository.update(id, dto);
   }
 }

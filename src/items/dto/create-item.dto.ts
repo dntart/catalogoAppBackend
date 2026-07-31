@@ -3,7 +3,9 @@ import { Categoria, Unidad } from '@prisma/client';
 import {
   IsBoolean,
   IsEnum,
+  IsNumber,
   IsOptional,
+  IsPositive,
   IsString,
   IsUrl,
   MinLength,
@@ -41,4 +43,14 @@ export class CreateItemDto {
   @IsOptional()
   @IsUrl()
   imagenUrl?: string;
+
+  @ApiPropertyOptional({
+    example: 5,
+    description:
+      'Umbral para avisar cuando el stock está por agotarse. Sin definir = sin alerta.',
+  })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @IsPositive()
+  stockMinimo?: number;
 }

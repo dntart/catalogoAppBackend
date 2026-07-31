@@ -4,6 +4,7 @@ import { ItemsService } from './items.service';
 import { ItemsRepository } from './items.repository';
 import { CreateItemDto } from './dto/create-item.dto';
 
+const NEGOCIO_ID = 'negocio-1';
 const ITEM_MOCK = { id: 'item-1', nombre: 'Vellón' } as Item;
 
 describe('ItemsService', () => {
@@ -35,9 +36,10 @@ describe('ItemsService', () => {
     };
     repository.create.mockResolvedValue(ITEM_MOCK);
 
-    await service.create(dto);
+    await service.create(NEGOCIO_ID, dto);
 
     expect(repository.create).toHaveBeenCalledWith(
+      NEGOCIO_ID,
       expect.objectContaining({ tieneColor: false, colorNombre: null }),
     );
   });
@@ -52,9 +54,10 @@ describe('ItemsService', () => {
     };
     repository.create.mockResolvedValue(ITEM_MOCK);
 
-    await service.create(dto);
+    await service.create(NEGOCIO_ID, dto);
 
     expect(repository.create).toHaveBeenCalledWith(
+      NEGOCIO_ID,
       expect.objectContaining({ colorNombre: 'Beige' }),
     );
   });
@@ -62,7 +65,7 @@ describe('ItemsService', () => {
   it('lanza NotFoundException si el item no existe', async () => {
     repository.findById.mockResolvedValue(null);
 
-    await expect(service.findOne('no-existe')).rejects.toThrow(
+    await expect(service.findOne(NEGOCIO_ID, 'no-existe')).rejects.toThrow(
       NotFoundException,
     );
   });
@@ -70,16 +73,18 @@ describe('ItemsService', () => {
   it('devuelve el item cuando existe', async () => {
     repository.findById.mockResolvedValue(ITEM_MOCK);
 
-    await expect(service.findOne('item-1')).resolves.toEqual(ITEM_MOCK);
+    await expect(service.findOne(NEGOCIO_ID, 'item-1')).resolves.toEqual(
+      ITEM_MOCK,
+    );
   });
 
   it('update verifica existencia antes de actualizar', async () => {
     repository.findById.mockResolvedValue(ITEM_MOCK);
     repository.update.mockResolvedValue(ITEM_MOCK);
 
-    await service.update('item-1', { activo: false });
+    await service.update(NEGOCIO_ID, 'item-1', { activo: false });
 
-    expect(repository.findById).toHaveBeenCalledWith('item-1');
+    expect(repository.findById).toHaveBeenCalledWith(NEGOCIO_ID, 'item-1');
     expect(repository.update).toHaveBeenCalledWith('item-1', { activo: false });
   });
 
@@ -87,7 +92,7 @@ describe('ItemsService', () => {
     repository.findById.mockResolvedValue(null);
 
     await expect(
-      service.update('no-existe', { activo: false }),
+      service.update(NEGOCIO_ID, 'no-existe', { activo: false }),
     ).rejects.toThrow(NotFoundException);
     expect(repository.update).not.toHaveBeenCalled();
   });

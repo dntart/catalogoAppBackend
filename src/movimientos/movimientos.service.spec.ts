@@ -14,6 +14,7 @@ import { OperariosService } from '../operarios/operarios.service';
 import { OrdenesProduccionService } from '../ordenes-produccion/ordenes-produccion.service';
 import { CreateMovimientoDto } from './dto/create-movimiento.dto';
 
+const NEGOCIO_ID = 'negocio-1';
 const ITEM_MOCK = { id: 'item-1' } as Item;
 const OPERARIO_MOCK = { id: 'operario-1' } as Operario;
 const MOVIMIENTO_MOCK = { id: 'mov-1' } as Movimiento;
@@ -67,25 +68,30 @@ describe('MovimientosService', () => {
   });
 
   it('crea un movimiento de COMPRA sin validar stock', async () => {
-    await service.create(buildDto());
+    await service.create(NEGOCIO_ID, buildDto());
 
     expect(stockService.validarStockSuficiente).not.toHaveBeenCalled();
     expect(repository.create).toHaveBeenCalledTimes(1);
   });
 
   it('valida stock suficiente antes de un CONSUMO', async () => {
-    await service.create(buildDto({ tipo: MovimientoTipo.CONSUMO }));
+    await service.create(
+      NEGOCIO_ID,
+      buildDto({ tipo: MovimientoTipo.CONSUMO }),
+    );
 
     expect(stockService.validarStockSuficiente).toHaveBeenCalledWith(
+      NEGOCIO_ID,
       'item-1',
       10,
     );
   });
 
   it('valida stock suficiente antes de una VENTA', async () => {
-    await service.create(buildDto({ tipo: MovimientoTipo.VENTA }));
+    await service.create(NEGOCIO_ID, buildDto({ tipo: MovimientoTipo.VENTA }));
 
     expect(stockService.validarStockSuficiente).toHaveBeenCalledWith(
+      NEGOCIO_ID,
       'item-1',
       10,
     );
@@ -97,23 +103,24 @@ describe('MovimientosService', () => {
     );
 
     await expect(
-      service.create(buildDto({ tipo: MovimientoTipo.VENTA })),
+      service.create(NEGOCIO_ID, buildDto({ tipo: MovimientoTipo.VENTA })),
     ).rejects.toThrow(BadRequestException);
     expect(repository.create).not.toHaveBeenCalled();
   });
 
   it('rechaza cantidad <= 0 para tipos distintos de AJUSTE', async () => {
-    await expect(service.create(buildDto({ cantidad: 0 }))).rejects.toThrow(
-      BadRequestException,
-    );
-    await expect(service.create(buildDto({ cantidad: -5 }))).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(
+      service.create(NEGOCIO_ID, buildDto({ cantidad: 0 })),
+    ).rejects.toThrow(BadRequestException);
+    await expect(
+      service.create(NEGOCIO_ID, buildDto({ cantidad: -5 })),
+    ).rejects.toThrow(BadRequestException);
     expect(repository.create).not.toHaveBeenCalled();
   });
 
   it('permite cantidad negativa en AJUSTE', async () => {
     await service.create(
+      NEGOCIO_ID,
       buildDto({ tipo: MovimientoTipo.AJUSTE, cantidad: -3 }),
     );
 
@@ -124,7 +131,9 @@ describe('MovimientosService', () => {
   it('lanza NotFoundException si el item no existe', async () => {
     itemsService.findOne.mockRejectedValue(new NotFoundException('no existe'));
 
-    await expect(service.create(buildDto())).rejects.toThrow(NotFoundException);
+    await expect(service.create(NEGOCIO_ID, buildDto())).rejects.toThrow(
+      NotFoundException,
+    );
     expect(repository.create).not.toHaveBeenCalled();
   });
 
@@ -134,24 +143,29 @@ describe('MovimientosService', () => {
     );
 
     await expect(
-      service.create(buildDto({ operarioId: 'operario-x' })),
+      service.create(NEGOCIO_ID, buildDto({ operarioId: 'operario-x' })),
     ).rejects.toThrow(NotFoundException);
   });
 
   it('no valida operario cuando no se informa operarioId', async () => {
-    await service.create(buildDto());
+    await service.create(NEGOCIO_ID, buildDto());
 
     expect(operariosService.findOne).not.toHaveBeenCalled();
   });
 
   it('cuando se informa ordenProduccionId, deriva el operarioId de la orden y no valida operarioId aparte', async () => {
     await service.create(
+      NEGOCIO_ID,
       buildDto({ ordenProduccionId: 'orden-1', operarioId: 'operario-1' }),
     );
 
-    expect(ordenesProduccionService.findOne).toHaveBeenCalledWith('orden-1');
+    expect(ordenesProduccionService.findOne).toHaveBeenCalledWith(
+      NEGOCIO_ID,
+      'orden-1',
+    );
     expect(operariosService.findOne).not.toHaveBeenCalled();
     expect(repository.create).toHaveBeenCalledWith(
+      NEGOCIO_ID,
       expect.objectContaining({
         operario: { connect: { id: 'operario-de-la-orden' } },
         ordenProduccion: { connect: { id: 'orden-1' } },
@@ -165,7 +179,7 @@ describe('MovimientosService', () => {
     );
 
     await expect(
-      service.create(buildDto({ ordenProduccionId: 'orden-x' })),
+      service.create(NEGOCIO_ID, buildDto({ ordenProduccionId: 'orden-x' })),
     ).rejects.toThrow(NotFoundException);
     expect(repository.create).not.toHaveBeenCalled();
   });

@@ -14,37 +14,50 @@ export class OrdenesProduccionService {
     private readonly itemsService: ItemsService,
   ) {}
 
-  async create(dto: CreateOrdenProduccionDto): Promise<OrdenProduccion> {
-    await this.operariosService.findOne(dto.operarioId);
+  async create(
+    negocioId: string,
+    dto: CreateOrdenProduccionDto,
+  ): Promise<OrdenProduccion> {
+    await this.operariosService.findOne(negocioId, dto.operarioId);
 
-    return this.ordenesProduccionRepository.create({
+    return this.ordenesProduccionRepository.create(negocioId, {
       operario: { connect: { id: dto.operarioId } },
       observaciones: dto.observaciones,
     });
   }
 
-  findAll(operarioId?: string): Promise<OrdenProduccion[]> {
+  findAll(negocioId: string, operarioId?: string): Promise<OrdenProduccion[]> {
     return this.ordenesProduccionRepository.findAll(
+      negocioId,
       operarioId ? { operarioId } : undefined,
     );
   }
 
-  async findOne(id: string) {
-    const orden = await this.ordenesProduccionRepository.findById(id);
+  async findOne(negocioId: string, id: string) {
+    const orden = await this.ordenesProduccionRepository.findById(
+      negocioId,
+      id,
+    );
     if (!orden) {
       throw new NotFoundException(`Orden de producción ${id} no encontrada`);
     }
     return orden;
   }
 
-  async getResumen(id: string): Promise<ResumenItemEntity[]> {
-    await this.findOne(id);
+  async getResumen(
+    negocioId: string,
+    id: string,
+  ): Promise<ResumenItemEntity[]> {
+    await this.findOne(negocioId, id);
     const grupos =
-      await this.ordenesProduccionRepository.sumarCantidadesPorItem(id);
+      await this.ordenesProduccionRepository.sumarCantidadesPorItem(
+        negocioId,
+        id,
+      );
 
     const resumen: ResumenItemEntity[] = [];
     for (const grupo of grupos) {
-      const item = await this.itemsService.findOne(grupo.itemId);
+      const item = await this.itemsService.findOne(negocioId, grupo.itemId);
       resumen.push({
         itemId: grupo.itemId,
         itemNombre: item.colorNombre
