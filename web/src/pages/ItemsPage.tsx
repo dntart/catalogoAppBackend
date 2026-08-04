@@ -1,13 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { createItem, fetchItems, fetchStock } from '../lib/api';
-import type { Categoria, Item, Unidad } from '../lib/types';
+import { createItem, fetchItems, fetchStockResumen } from '../lib/api';
+import type { Categoria, Item, ResumenStockItem, Unidad } from '../lib/types';
 
 const CATEGORIAS: Categoria[] = ['MATERIAL', 'PRODUCTO'];
 const UNIDADES: Unidad[] = ['METRO', 'KG', 'CONO', 'UNIDAD'];
 
 export function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
-  const [stockPorItem, setStockPorItem] = useState<Record<string, number>>({});
+  const [resumenPorItem, setResumenPorItem] = useState<Record<string, ResumenStockItem>>({});
   const [loading, setLoading] = useState(true);
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('MATERIAL');
@@ -19,17 +19,15 @@ export function ItemsPage() {
 
   function load(): void {
     setLoading(true);
-    fetchItems()
-      .then(setItems)
+    Promise.all([fetchItems(), fetchStockResumen()])
+      .then(([itemsData, resumen]) => {
+        setItems(itemsData);
+        setResumenPorItem(Object.fromEntries(resumen.map((r) => [r.itemId, r])));
+      })
       .finally(() => setLoading(false));
   }
 
   useEffect(load, []);
-
-  async function verStock(itemId: string): Promise<void> {
-    const { stock } = await fetchStock(itemId);
-    setStockPorItem((prev) => ({ ...prev, [itemId]: stock }));
-  }
 
   async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault();
@@ -139,26 +137,29 @@ export function ItemsPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className="border-t border-stone-100">
-                    <td className="px-4 py-2">{item.nombre}</td>
-                    <td className="px-4 py-2">{item.categoria}</td>
-                    <td className="px-4 py-2">{item.unidad}</td>
-                    <td className="px-4 py-2">{item.colorNombre ?? '—'}</td>
-                    <td className="px-4 py-2">
-                      {stockPorItem[item.id] !== undefined ? (
-                        stockPorItem[item.id]
-                      ) : (
-                        <button
-                          onClick={() => verStock(item.id)}
-                          className="text-stone-500 underline hover:text-stone-800"
-                        >
-                          ver
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {items.map((item) => {
+                  const resumen = resumenPorItem[item.id];
+                  return (
+                    <tr key={item.id} className="border-t border-stone-100">
+                      <td className="px-4 py-2">{item.nombre}</td>
+                      <td className="px-4 py-2">{item.categoria}</td>
+                      <td className="px-4 py-2">{item.unidad}</td>
+                      <td className="px-4 py-2">{item.colorNombre ?? '—'}</td>
+                      <td className="px-4 py-2 tabular-nums">
+                        {resumen === undefined ? (
+                          '—'
+                        ) : resumen.bajoMinimo ? (
+                          <span className="inline-flex items-center gap-1 font-medium text-amber-700">
+                            <span aria-hidden="true">⚠️</span>
+                            {resumen.stock}
+                          </span>
+                        ) : (
+                          resumen.stock
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

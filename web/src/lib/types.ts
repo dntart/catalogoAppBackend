@@ -43,9 +43,14 @@ export interface Movimiento {
   operario?: Operario | null;
 }
 
-export interface StockResponse {
+export interface ResumenStockItem {
   itemId: string;
+  nombre: string;
+  categoria: Categoria;
+  unidad: Unidad;
   stock: number;
+  stockMinimo: number | null;
+  bajoMinimo: boolean;
 }
 
 export interface AuthenticatedUser {

@@ -1,10 +1,11 @@
 import axios from 'axios';
 import type {
+  Categoria,
   Item,
   Movimiento,
   Operario,
   OrdenProduccion,
-  StockResponse,
+  ResumenStockItem,
   AuthenticatedUser,
 } from './types';
 
@@ -65,8 +66,10 @@ export async function createItem(payload: Partial<Item>): Promise<Item> {
   return data;
 }
 
-export async function fetchStock(itemId: string): Promise<StockResponse> {
-  const { data } = await api.get<StockResponse>(`/stock/${itemId}`);
+export async function fetchStockResumen(categoria?: Categoria): Promise<ResumenStockItem[]> {
+  const { data } = await api.get<ResumenStockItem[]>('/stock', {
+    params: categoria ? { categoria } : undefined,
+  });
   return data;
 }
 

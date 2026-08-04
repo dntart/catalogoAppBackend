@@ -3,6 +3,7 @@ import { AuthProvider } from './auth/AuthContext';
 import { LoginPage } from './auth/LoginPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
+import { ResumenPage } from './pages/ResumenPage';
 import { ItemsPage } from './pages/ItemsPage';
 import { OperariosPage } from './pages/OperariosPage';
 import { OrdenesProduccionPage } from './pages/OrdenesProduccionPage';
@@ -21,7 +22,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<ItemsPage />} />
+            <Route path="/" element={<ResumenPage />} />
+            <Route path="/items" element={<ItemsPage />} />
             <Route path="/operarios" element={<OperariosPage />} />
             <Route path="/ordenes-produccion" element={<OrdenesProduccionPage />} />
             <Route path="/movimientos" element={<MovimientosPage />} />

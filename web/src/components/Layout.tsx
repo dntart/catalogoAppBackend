@@ -2,7 +2,8 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 
 const links = [
-  { to: '/', label: 'Items' },
+  { to: '/', label: 'Resumen' },
+  { to: '/items', label: 'Items' },
   { to: '/operarios', label: 'Operarios' },
   { to: '/ordenes-produccion', label: 'Órdenes de producción' },
   { to: '/movimientos', label: 'Movimientos' },
