@@ -17,14 +17,17 @@ Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y 
 7. [Autenticación](#autenticación)
 8. [Alta de negocios (admin)](#alta-de-negocios-admin)
 9. [Bot de WhatsApp](#bot-de-whatsapp)
-10. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
-11. [Variables de entorno](#variables-de-entorno)
-12. [Scripts disponibles](#scripts-disponibles)
-13. [API — endpoints](#api--endpoints)
-14. [Testing](#testing)
-15. [Troubleshooting](#troubleshooting)
-16. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
-17. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
+10. [Panel web](#panel-web)
+11. [Deploy en producción](#deploy-en-producción)
+12. [Guía de uso para el dueño del negocio](#guía-de-uso-para-el-dueño-del-negocio)
+13. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
+14. [Variables de entorno](#variables-de-entorno)
+15. [Scripts disponibles](#scripts-disponibles)
+16. [API — endpoints](#api--endpoints)
+17. [Testing](#testing)
+18. [Troubleshooting](#troubleshooting)
+19. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
+20. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
 
 ---
 
@@ -240,6 +243,31 @@ Pensado para que el dueño registre todo (compra de tela, entrega a una operaria
 6. Levantá el backend (`npm run start:dev`) y escribile "hola" al número del sandbox desde tu WhatsApp. Debería responderte el menú.
 
 > Nota: cada vez que reiniciás ngrok (versión gratuita) la URL cambia, así que hay que volver a pegarla en la consola de Twilio. Para no depender de esto en desarrollo, también podés probar el flujo sin WhatsApp real pegándole directo al webhook con `curl` (ver ejemplo en [Testing](#testing)).
+
+## Panel web
+
+`web/` es un frontend aparte (React + Vite + Tailwind, `web/README.md` tiene el detalle propio) para **consultar** lo que ya se cargó — no reemplaza al bot para la carga diaria, es la vista de "ver todo junto".
+
+- Login contra `POST /auth/login`, mismo JWT que usa el resto de la API — el token se guarda en el browser y viaja en cada request (`web/src/lib/api.ts`).
+- Secciones (`web/src/pages/`): **Items** (catálogo + stock), **Operarios**, **Órdenes de producción**, **Movimientos** (historial completo del ledger).
+- Se conecta al backend vía `VITE_API_URL` (env var de build, no de runtime — hay que rebuildear/redeployar el frontend si cambia la URL del backend).
+- El backend tiene que aceptar el origen del frontend en `CORS_ORIGIN` (ver [Variables de entorno](#variables-de-entorno)) — acepta una lista separada por comas, así conviven el dominio de producción y `http://localhost:5173` de desarrollo.
+
+## Deploy en producción
+
+El sistema corre 24/7 en la nube, no depende de que una PC esté prendida:
+
+- **Backend + Postgres**: [Railway](https://railway.app/). El backend se despliega con un `Dockerfile` propio (no con el builder automático de Railway — Railpack no incluía el build compilado en la imagen final, ver comentario en el `Dockerfile`). El comando de arranque (`railway:start` en `package.json`) corre `prisma migrate deploy` antes de levantar el server, así cada deploy aplica migraciones pendientes solo.
+- **Frontend**: [Vercel](https://vercel.com/), deploy está atado a `VITE_API_URL` seteada como variable de entorno de build en el proyecto de Vercel.
+- **Bot de WhatsApp**: mismo backend de Railway, expuesto vía Twilio (webhook apuntando a `<url-de-railway>/whatsapp/webhook`).
+
+Correr el seed o cualquier script puntual contra la base de producción **no funciona desde la máquina local** — `DATABASE_URL` en Railway usa el hostname interno `postgres.railway.internal`, que solo resuelve dentro de la red privada de Railway. Para eso: `railway ssh -- <comando>` (ejecuta el comando dentro del contenedor del backend, que sí tiene acceso a esa red). Necesita una clave SSH registrada una vez (`railway ssh keys add`).
+
+## Guía de uso para el dueño del negocio
+
+[`docs/guia-de-uso.md`](docs/guia-de-uso.md) — instructivo en español, sin jerga técnica, pensado para la persona que usa el sistema día a día (no para quien lo desarrolla): cómo cargar movimientos por WhatsApp, qué muestra cada sección del panel web, dudas frecuentes.
+
+No incluye credenciales de acceso a propósito — cada negocio tiene su propio usuario/contraseña (ver [Alta de negocios](#alta-de-negocios-admin)), y ese dato no se versiona en el repositorio.
 
 ## Puesta en marcha (proyecto ya clonado)
 
