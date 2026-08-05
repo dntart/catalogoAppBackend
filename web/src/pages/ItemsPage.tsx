@@ -135,6 +135,7 @@ export function ItemsPage() {
                   <th className="px-4 py-2">Unidad</th>
                   <th className="px-4 py-2">Color</th>
                   <th className="px-4 py-2">Stock</th>
+                  <th className="px-4 py-2">Alta</th>
                 </tr>
               </thead>
               <tbody>
@@ -158,6 +159,9 @@ export function ItemsPage() {
                         ) : (
                           resumen.stock
                         )}
+                      </td>
+                      <td className="px-4 py-2 text-stone-500">
+                        {new Date(item.createdAt).toLocaleDateString()}
                       </td>
                     </tr>
                   );
