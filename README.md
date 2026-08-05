@@ -119,6 +119,7 @@ Notar `findFirst` en vez de `findUnique`: como la unicidad de `id` ya no alcanza
 |---|---|---|
 | id | String (uuid) | |
 | negocioId | String | FK a `Negocio` |
+| codigo | String | autogenerado (`MAT-0007`, `PROD-0012`, ...), nunca lo escribe el usuario — ver más abajo |
 | nombre | String | ej. "Gabardina", "Zorro" |
 | categoria | Categoria | |
 | unidad | Unidad | |
@@ -129,7 +130,21 @@ Notar `findFirst` en vez de `findUnique`: como la unicidad de `id` ya no alcanza
 | activo | Boolean | soft-flag, no hay borrado físico |
 | createdAt | DateTime | |
 
-Unique compuesto `(negocioId, nombre, colorNombre)` — mismo nombre/color puede repetirse entre negocios distintos, no dentro del mismo.
+Unique compuesto `(negocioId, nombre, colorNombre)` — mismo nombre/color puede repetirse entre negocios distintos, no dentro del mismo. También hay un unique compuesto `(negocioId, codigo)`.
+
+**Código autogenerado (`Item.codigo`)**: soluciona el caso de dos variantes que comparten nombre/color pero no son el mismo item — ej. "Pollera" marrón hecha de Corderoy vs. de Gabardina, donde forzar toda esa diferencia dentro del nombre lo vuelve largo e inmanejable. Cada categoría tiene su propia numeración (`MAT-` para `MATERIAL`, `PROD-` para `PRODUCTO`), asignada por `ItemsRepository.create()` dentro de la misma transacción que crea el item:
+
+```ts
+// src/items/items.repository.ts — simplificado
+const secuencia = await tx.secuenciaCodigo.upsert({
+  where: { negocioId_categoria: { negocioId, categoria } },
+  update: { ultimoValor: { increment: 1 } },
+  create: { negocioId, categoria, ultimoValor: 1 },
+});
+const codigo = `${prefijo}-${String(secuencia.ultimoValor).padStart(4, '0')}`;
+```
+
+El contador vive en su propia tabla (`SecuenciaCodigo`, una fila por `negocioId` + `categoria`) para que el incremento sea atómico a nivel de fila de Postgres — dos altas simultáneas del mismo negocio nunca terminan con el mismo código, sin necesidad de reintentos ni locks manuales.
 
 **Operario** — quién hace el movimiento
 | campo | tipo |
@@ -246,10 +261,16 @@ Pensado para que el dueño registre todo (compra de tela, entrega a una operaria
 
 ## Panel web
 
-`web/` es un frontend aparte (React + Vite + Tailwind, `web/README.md` tiene el detalle propio) para **consultar** lo que ya se cargó — no reemplaza al bot para la carga diaria, es la vista de "ver todo junto".
+`web/` es un frontend aparte (React + Vite + Tailwind, `web/README.md` tiene el detalle propio). No es solo de consulta — tiene formularios de carga en cada sección, así que también sirve como respaldo completo si el bot de WhatsApp no está disponible (ver [Guía de uso](#guía-de-uso-para-el-dueño-del-negocio)).
 
 - Login contra `POST /auth/login`, mismo JWT que usa el resto de la API — el token se guarda en el browser y viaja en cada request (`web/src/lib/api.ts`).
-- Secciones (`web/src/pages/`): **Items** (catálogo + stock), **Operarios**, **Órdenes de producción**, **Movimientos** (historial completo del ledger).
+- Secciones (`web/src/pages/`), en el orden del nav:
+  - **Resumen** — landing page (`/`). Gráfico de barras de stock por Materiales y Productos (`ResumenPage.tsx`), ordenado de menor a mayor cantidad, con alerta visual (ícono + etiqueta, nunca solo color) para "Sin stock" (stock en 0) y "Bajo mínimo" (`bajoMinimo` del resumen de `GET /stock`). Es la vista que más valor da de un vistazo, por eso quedó como entrada en vez de Items.
+  - **Items** — catálogo con su stock (`GET /stock` en bloque, no item por item — ver nota de rendimiento más abajo), fecha de alta, y formulario para dar de alta uno nuevo.
+  - **Operarios** — listado + alta.
+  - **Órdenes de producción** — listado + alta.
+  - **Movimientos** — historial del ledger + formulario para cargar un movimiento nuevo (equivalente a las opciones 1–5 del bot). A diferencia del bot, **no pide confirmación** antes de guardar.
+- **Rendimiento**: `ItemsPage` trae el stock de todos los items con una sola llamada a `GET /stock` (`Promise.all` junto con `GET /items`) en vez de pedirlo item por item — la versión anterior tenía un botón "ver" por fila que disparaba un request por click, un N+1 evitable ya que el endpoint de resumen siempre devolvió todo junto.
 - Se conecta al backend vía `VITE_API_URL` (env var de build, no de runtime — hay que rebuildear/redeployar el frontend si cambia la URL del backend).
 - El backend tiene que aceptar el origen del frontend en `CORS_ORIGIN` (ver [Variables de entorno](#variables-de-entorno)) — acepta una lista separada por comas, así conviven el dominio de producción y `http://localhost:5173` de desarrollo.
 
@@ -360,7 +381,7 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 - `GET /movimientos/:id`
 
 **Stock** (`/stock`)
-- `GET /stock?categoria=MATERIAL|PRODUCTO` — resumen de stock de todos los items activos, incluye `stockMinimo` y `bajoMinimo` por item (ver [Motor de stock](#motor-de-stock))
+- `GET /stock?categoria=MATERIAL|PRODUCTO` — resumen de stock de todos los items activos, incluye `codigo`, `stockMinimo` y `bajoMinimo` por item (ver [Motor de stock](#motor-de-stock))
 - `GET /stock/:itemId` — `{ itemId, stock }` calculado en el momento
 
 **WhatsApp** (`/whatsapp`) — no aparece en Swagger (`@ApiExcludeController`), no usa JWT
