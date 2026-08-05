@@ -129,6 +129,7 @@ export function ItemsPage() {
             <table className="w-full text-left text-sm">
               <thead className="bg-stone-100 text-stone-600">
                 <tr>
+                  <th className="px-4 py-2">Código</th>
                   <th className="px-4 py-2">Nombre</th>
                   <th className="px-4 py-2">Categoría</th>
                   <th className="px-4 py-2">Unidad</th>
@@ -141,6 +142,7 @@ export function ItemsPage() {
                   const resumen = resumenPorItem[item.id];
                   return (
                     <tr key={item.id} className="border-t border-stone-100">
+                      <td className="px-4 py-2 font-mono text-xs text-stone-500">{item.codigo}</td>
                       <td className="px-4 py-2">{item.nombre}</td>
                       <td className="px-4 py-2">{item.categoria}</td>
                       <td className="px-4 py-2">{item.unidad}</td>

@@ -21,8 +21,8 @@ function BarraStock({ item, colorNormal, max }: { item: ResumenStockItem; colorN
 
   return (
     <div className="flex items-center gap-3 py-1.5">
-      <div className="w-40 shrink-0 truncate text-sm text-stone-700" title={item.nombre}>
-        {item.nombre}
+      <div className="w-44 shrink-0 truncate text-sm text-stone-700" title={`${item.codigo} · ${item.nombre}`}>
+        <span className="font-mono text-xs text-stone-400">{item.codigo}</span> {item.nombre}
       </div>
       <div className="h-5 flex-1 overflow-hidden rounded-sm" style={{ backgroundColor: COLOR_TRACK }}>
         <div

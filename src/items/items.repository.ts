@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Item, Prisma } from '@prisma/client';
+import { Categoria, Item, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+
+function prefijoCodigo(categoria: Categoria): string {
+  return categoria === Categoria.MATERIAL ? 'MAT' : 'PROD';
+}
 
 @Injectable()
 export class ItemsRepository {
@@ -8,10 +12,23 @@ export class ItemsRepository {
 
   create(
     negocioId: string,
-    data: Omit<Prisma.ItemCreateInput, 'negocio'>,
+    data: Omit<Prisma.ItemCreateInput, 'negocio' | 'codigo'>,
   ): Promise<Item> {
-    return this.prisma.item.create({
-      data: { ...data, negocio: { connect: { id: negocioId } } },
+    return this.prisma.$transaction(async (tx) => {
+      // Contador atómico por negocio+categoría (UPDATE con lock de fila) para
+      // que dos altas simultáneas nunca terminen con el mismo código.
+      const secuencia = await tx.secuenciaCodigo.upsert({
+        where: {
+          negocioId_categoria: { negocioId, categoria: data.categoria },
+        },
+        update: { ultimoValor: { increment: 1 } },
+        create: { negocioId, categoria: data.categoria, ultimoValor: 1 },
+      });
+      const codigo = `${prefijoCodigo(data.categoria)}-${String(secuencia.ultimoValor).padStart(4, '0')}`;
+
+      return tx.item.create({
+        data: { ...data, codigo, negocio: { connect: { id: negocioId } } },
+      });
     });
   }
 

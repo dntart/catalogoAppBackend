@@ -5,6 +5,12 @@ export class ItemEntity {
   @ApiProperty()
   id!: string;
 
+  @ApiProperty({
+    example: 'MAT-0007',
+    description: 'Código corto autogenerado',
+  })
+  codigo!: string;
+
   @ApiProperty()
   nombre!: string;
 

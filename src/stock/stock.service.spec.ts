@@ -13,6 +13,7 @@ import { ItemsService } from '../items/items.service';
 const NEGOCIO_ID = 'negocio-1';
 const ITEM_GABARDINA = {
   id: 'item-1',
+  codigo: 'MAT-0001',
   nombre: 'Gabardina',
   colorNombre: 'Beige',
   categoria: Categoria.MATERIAL,
@@ -20,6 +21,7 @@ const ITEM_GABARDINA = {
 } as Item;
 const ITEM_ZORRO = {
   id: 'item-2',
+  codigo: 'PROD-0001',
   nombre: 'Zorro',
   colorNombre: null,
   categoria: Categoria.PRODUCTO,
@@ -27,6 +29,7 @@ const ITEM_ZORRO = {
 } as Item;
 const ITEM_CON_MINIMO = {
   id: 'item-3',
+  codigo: 'MAT-0002',
   nombre: 'Hilo Poliéster',
   colorNombre: 'Blanco',
   categoria: Categoria.MATERIAL,
@@ -178,6 +181,7 @@ describe('StockService', () => {
       expect(resumen).toEqual([
         {
           itemId: 'item-1',
+          codigo: 'MAT-0001',
           nombre: 'Gabardina Beige',
           categoria: Categoria.MATERIAL,
           unidad: Unidad.METRO,
@@ -187,6 +191,7 @@ describe('StockService', () => {
         },
         {
           itemId: 'item-2',
+          codigo: 'PROD-0001',
           nombre: 'Zorro',
           categoria: Categoria.PRODUCTO,
           unidad: Unidad.UNIDAD,
@@ -206,6 +211,7 @@ describe('StockService', () => {
       expect(resumen).toEqual([
         {
           itemId: 'item-2',
+          codigo: 'PROD-0001',
           nombre: 'Zorro',
           categoria: Categoria.PRODUCTO,
           unidad: Unidad.UNIDAD,
@@ -231,6 +237,7 @@ describe('StockService', () => {
       expect(resumen).toEqual([
         {
           itemId: 'item-3',
+          codigo: 'MAT-0002',
           nombre: 'Hilo Poliéster Blanco',
           categoria: Categoria.MATERIAL,
           unidad: Unidad.CONO,

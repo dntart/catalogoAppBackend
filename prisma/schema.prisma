@@ -45,6 +45,7 @@ model Negocio {
   operarios         Operario[]
   movimientos       Movimiento[]
   ordenesProduccion OrdenProduccion[]
+  secuenciasCodigo  SecuenciaCodigo[]
 
   @@map("negocios")
 }
@@ -71,6 +72,11 @@ model User {
 model Item {
   id          String   @id @default(uuid())
   negocioId   String
+  /// Código corto autogenerado (ej. "MAT-0007", "PROD-0012") — identificador
+  /// rápido para cuando el nombre + color no alcanza para distinguir variantes
+  /// (ej. dos productos del mismo color pero de tela distinta). Nunca lo
+  /// escribe el usuario, lo asigna ItemsRepository.create() vía SecuenciaCodigo.
+  codigo      String
   nombre      String
   categoria   Categoria
   unidad      Unidad
@@ -86,8 +92,23 @@ model Item {
   movimientos Movimiento[]
 
   @@unique([negocioId, nombre, colorNombre])
+  @@unique([negocioId, codigo])
   @@index([negocioId])
   @@map("items")
+}
+
+/// Contador atómico por negocio+categoría para generar Item.codigo en orden
+/// ("MAT-0001", "MAT-0002", ...) sin colisiones bajo cargas concurrentes.
+model SecuenciaCodigo {
+  id          String    @id @default(uuid())
+  negocioId   String
+  categoria   Categoria
+  ultimoValor Int       @default(0)
+
+  negocio Negocio @relation(fields: [negocioId], references: [id])
+
+  @@unique([negocioId, categoria])
+  @@map("secuencias_codigo")
 }
 
 model Operario {

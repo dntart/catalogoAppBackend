@@ -19,6 +19,16 @@ const PRODUCTOS = [
 
 const OPERARIOS = ['María', 'Luján'];
 
+async function siguienteCodigo(negocioId: string, categoria: Categoria): Promise<string> {
+  const prefijo = categoria === Categoria.MATERIAL ? 'MAT' : 'PROD';
+  const secuencia = await prisma.secuenciaCodigo.upsert({
+    where: { negocioId_categoria: { negocioId, categoria } },
+    update: { ultimoValor: { increment: 1 } },
+    create: { negocioId, categoria, ultimoValor: 1 },
+  });
+  return `${prefijo}-${String(secuencia.ultimoValor).padStart(4, '0')}`;
+}
+
 async function upsertItem(
   negocioId: string,
   nombre: string,
@@ -30,9 +40,11 @@ async function upsertItem(
   if (existente) {
     return;
   }
+  const codigo = await siguienteCodigo(negocioId, categoria);
   await prisma.item.create({
     data: {
       negocioId,
+      codigo,
       nombre,
       categoria,
       unidad,

@@ -4,6 +4,7 @@ export type MovimientoTipo = 'COMPRA' | 'CONSUMO' | 'PRODUCCION' | 'VENTA' | 'AJ
 
 export interface Item {
   id: string;
+  codigo: string;
   nombre: string;
   categoria: Categoria;
   unidad: Unidad;
@@ -45,6 +46,7 @@ export interface Movimiento {
 
 export interface ResumenStockItem {
   itemId: string;
+  codigo: string;
   nombre: string;
   categoria: Categoria;
   unidad: Unidad;

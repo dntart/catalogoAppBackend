@@ -100,6 +100,7 @@ export class StockService {
       const stockMinimo = item.stockMinimo ? item.stockMinimo.toNumber() : null;
       return {
         itemId: item.id,
+        codigo: item.codigo,
         nombre: item.colorNombre
           ? `${item.nombre} ${item.colorNombre}`
           : item.nombre,

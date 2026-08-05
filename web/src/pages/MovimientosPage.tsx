@@ -50,6 +50,11 @@ export function MovimientosPage() {
     return item.colorNombre ? `${item.nombre} ${item.colorNombre}` : item.nombre;
   }
 
+  function opcionItem(item: Item): string {
+    const nombreCompleto = item.colorNombre ? `${item.nombre} ${item.colorNombre}` : item.nombre;
+    return `${item.codigo} · ${nombreCompleto}`;
+  }
+
   function nombreOperario(id: string | null): string {
     if (!id) return '—';
     return operarios.find((op) => op.id === id)?.nombre ?? id;
@@ -97,7 +102,7 @@ export function MovimientosPage() {
             >
               {items.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {nombreItem(item.id)}
+                  {opcionItem(item)}
                 </option>
               ))}
             </select>

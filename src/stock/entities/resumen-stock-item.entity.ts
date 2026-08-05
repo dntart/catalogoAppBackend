@@ -5,6 +5,12 @@ export class ResumenStockItemEntity {
   @ApiProperty()
   itemId!: string;
 
+  @ApiProperty({
+    example: 'MAT-0007',
+    description: 'Código corto autogenerado',
+  })
+  codigo!: string;
+
   @ApiProperty({ example: 'Gabardina Beige' })
   nombre!: string;
 
