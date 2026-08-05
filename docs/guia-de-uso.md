@@ -10,8 +10,8 @@ Guía para el dueño/operador del negocio: cómo registrar movimientos por Whats
 
 | | Para qué sirve |
 |---|---|
-| **Bot de WhatsApp** | Cargar movimientos del día a día: compras, entregas a operarias, ventas, ajustes — todo charlando, sin entrar a ninguna página. |
-| **Panel web** | Ver todo lo cargado: catálogo completo, historial de movimientos, operarias, órdenes de producción. Pensado para consultar y revisar, no para cargar día a día. |
+| **Bot de WhatsApp** | Cargar movimientos del día a día: compras, entregas a operarias, ventas, ajustes — todo charlando, sin entrar a ninguna página. Es la forma recomendada para el uso diario. |
+| **Panel web** | Ver todo lo cargado de un vistazo (resumen de stock, historial, catálogo) y también cargar o corregir desde ahí — sirve como respaldo completo si el WhatsApp no anda. |
 
 Los dos apuntan a la misma información — lo que cargás por WhatsApp aparece al instante en el panel web, y viceversa.
 
@@ -50,12 +50,31 @@ Los dos apuntan a la misma información — lo que cargás por WhatsApp aparece 
 Entrá a la URL del panel (te la pasa el administrador del sistema) e iniciá sesión con tu usuario y contraseña.
 
 **Secciones**:
-- **Items** — catálogo completo de materiales y productos, con su stock actual.
-- **Operarios** — personas registradas que reciben material y entregan producto terminado.
-- **Órdenes de producción** — cada entrega de material a una operaria, vinculada con lo que devolvió.
-- **Movimientos** — historial completo: cada compra, entrega, recepción, venta y ajuste cargado, con fecha y quién lo hizo.
+- **Resumen** — lo primero que ves al entrar: gráfico de stock de materiales y productos, con lo que está bajo mínimo o sin stock destacado en rojo/amarillo. Para un vistazo rápido de qué falta.
+- **Items** — catálogo completo de materiales y productos, con su stock actual, y un formulario para dar de alta un material o producto nuevo.
+- **Operarios** — personas registradas que reciben material y entregan producto terminado, con formulario para agregar una nueva.
+- **Órdenes de producción** — cada entrega de material a una operaria, vinculada con lo que devolvió, con formulario para abrir una nueva.
+- **Movimientos** — historial completo (cada compra, entrega, recepción, venta y ajuste cargado, con fecha y quién lo hizo) **y un formulario para cargar movimientos nuevos** — es el equivalente a las opciones 1 a 5 del menú de WhatsApp, útil sobre todo si el bot no está disponible.
 
 Para salir, usá el botón **"Salir"** arriba a la derecha.
+
+> ⚠️ A diferencia del bot, el panel web **no pide confirmación antes de guardar** — al tocar "Registrar" o "Crear" queda grabado al instante. Revisá los datos antes de enviar.
+
+### ¿Qué tipo de movimiento elijo? (para el formulario de Movimientos)
+
+El desplegable "Tipo" no dice cuál suma o resta stock — se elige según lo que realmente pasó, no según si querés sumar o restar:
+
+| Quiero... | Elijo | Suma o resta |
+|---|---|---|
+| Registrar tela que le compré a un proveedor | **Compra** | Suma |
+| Darle material a una operaria para que trabaje | **Consumo** | Resta |
+| Registrar un producto terminado que volvió (una operaria lo entregó) | **Producción** | Suma |
+| Registrar una venta | **Venta** | Resta |
+| Corregir un conteo mal hecho (sobra o falta algo sin que haya venta/compra de por medio) | **Ajuste** | Suma o resta, según el signo de la cantidad |
+
+**Ajuste** es el único que acepta cantidad **negativa** — poné el número con `-` adelante para restar (ej. `-3`), sin signo para sumar. En los demás tipos, poné siempre la cantidad en positivo; el sistema ya sabe si suma o resta según el tipo elegido.
+
+**Ejemplo con un producto terminado** (como "Ballena"): para sumar unidades nuevas usá **Producción**; para restar por una venta usá **Venta**; **Compra** y **Consumo** son para materiales (tela), no para productos terminados.
 
 ## 4. Dudas frecuentes
 
@@ -67,3 +86,6 @@ No hay forma de borrar o editar un movimiento ya confirmado (es intencional, par
 
 **¿Puedo usar el bot desde otro número de WhatsApp?**
 No por tu cuenta — el número autorizado lo configura el administrador del sistema.
+
+**Se cayó el WhatsApp (o no me conecta), ¿pierdo la posibilidad de cargar?**
+No — entrá al panel web y cargá desde ahí, en la sección **Movimientos** (ver [¿Qué tipo de movimiento elijo?](#qué-tipo-de-movimiento-elijo-para-el-formulario-de-movimientos) más arriba). Es la misma base de datos, así que no se pierde ni se duplica nada cuando el bot vuelva a andar.
