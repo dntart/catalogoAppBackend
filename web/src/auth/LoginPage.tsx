@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from './AuthContext';
 
@@ -35,7 +35,7 @@ export function LoginPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow"
       >
-        <h1 className="text-xl font-semibold text-stone-800">Fauna de Tela</h1>
+        <h1 className="text-xl font-semibold text-stone-800">StockAsist</h1>
         <div>
           <label className="mb-1 block text-sm text-stone-600">Email</label>
           <input
@@ -64,6 +64,12 @@ export function LoginPage() {
         >
           {submitting ? 'Ingresando...' : 'Ingresar'}
         </button>
+        <p className="text-center text-sm text-stone-500">
+          ¿No tenés cuenta?{' '}
+          <Link to="/registro" className="text-stone-800 underline">
+            Registrate
+          </Link>
+        </p>
       </form>
     </div>
   );

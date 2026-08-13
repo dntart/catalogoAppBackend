@@ -22,7 +22,7 @@ export class AdminController {
     summary:
       'Dar de alta un negocio nuevo con su usuario dueño (solo super-admin)',
     description:
-      'Crea el Negocio y el User dueño en un solo paso. Pensado para altas manuales por el fundador del SaaS, no es un registro self-service.',
+      'Crea el Negocio y el User dueño en un solo paso. El camino recomendado es que el cliente se registre solo en POST /negocios/registro — este endpoint es el respaldo manual para cuando no puede o no quiere hacerlo por su cuenta.',
   })
   @ApiResponse({ status: 201, type: NegocioEntity })
   @ApiResponse({

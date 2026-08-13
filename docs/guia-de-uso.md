@@ -1,8 +1,13 @@
-# Guía de uso — Fauna de Tela
+# Guía de uso — StockAsist
 
-Guía para el dueño/operador del negocio: cómo registrar movimientos por WhatsApp y cómo consultar todo lo cargado desde el panel web.
+Guía para el dueño/operador del negocio: cómo crear tu cuenta, registrar movimientos por WhatsApp y consultar todo lo cargado desde el panel web.
 
-> Las credenciales de acceso (usuario y contraseña) te las da quien administra el sistema — no están en este documento.
+---
+
+## 0. Cómo empezar
+
+- **Si todavía no tenés cuenta**: entrá al panel web y hacé clic en "Registrate" — completás el nombre de tu negocio, tu nombre, email y contraseña, y quedás adentro al instante. No hace falta que nadie te dé de alta.
+- **Si alguien ya te dio de alta** (por ejemplo, no pudiste registrarte solo): usá el email y la contraseña que te pasó esa persona.
 
 ---
 

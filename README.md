@@ -1,6 +1,8 @@
-# Fauna de Tela
+# StockAsist
 
 Sistema de gestión de producción e inventario multi-tenant (SaaS) para emprendimientos textiles. Lleva el catálogo de productos y materiales, registra quién hizo qué movimiento (compra, consumo, producción, venta, ajuste) y calcula el stock siempre a partir de ese historial — nunca se edita un número de stock a mano. Cada negocio (`Negocio`) tiene sus propios datos, completamente aislados de los demás, y puede operar tanto desde la API/Swagger como desde un bot de WhatsApp.
+
+> "Fauna de Tela" es el primer cliente real del sistema (una fábrica de muñecos de tela), no el nombre del producto — vas a ver ese nombre como dato de ejemplo en el seed y en algunos ejemplos, no como marca.
 
 Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y cómo replicar el proceso completo de armado desde cero (útil si querés adaptar esta misma base a otro rubro/negocio).
 
@@ -15,19 +17,20 @@ Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y 
 5. [Motor de stock](#motor-de-stock)
 6. [Trazabilidad: entrega de material → producto terminado](#trazabilidad-entrega-de-material--producto-terminado)
 7. [Autenticación](#autenticación)
-8. [Alta de negocios (admin)](#alta-de-negocios-admin)
-9. [Bot de WhatsApp](#bot-de-whatsapp)
-10. [Panel web](#panel-web)
-11. [Deploy en producción](#deploy-en-producción)
-12. [Guía de uso para el dueño del negocio](#guía-de-uso-para-el-dueño-del-negocio)
-13. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
-14. [Variables de entorno](#variables-de-entorno)
-15. [Scripts disponibles](#scripts-disponibles)
-16. [API — endpoints](#api--endpoints)
-17. [Testing](#testing)
-18. [Troubleshooting](#troubleshooting)
-19. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
-20. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
+8. [Alta de negocios](#alta-de-negocios)
+9. [Seguridad](#seguridad)
+10. [Bot de WhatsApp](#bot-de-whatsapp)
+11. [Panel web](#panel-web)
+12. [Deploy en producción](#deploy-en-producción)
+13. [Guía de uso para el dueño del negocio](#guía-de-uso-para-el-dueño-del-negocio)
+14. [Puesta en marcha (proyecto ya clonado)](#puesta-en-marcha-proyecto-ya-clonado)
+15. [Variables de entorno](#variables-de-entorno)
+16. [Scripts disponibles](#scripts-disponibles)
+17. [API — endpoints](#api--endpoints)
+18. [Testing](#testing)
+19. [Troubleshooting](#troubleshooting)
+20. [Cómo se construyó desde cero (guía de replicación)](#cómo-se-construyó-desde-cero-guía-de-replicación)
+21. [Cómo adaptar esta base a otro negocio](#cómo-adaptar-esta-base-a-otro-negocio)
 
 ---
 
@@ -110,7 +113,7 @@ Notar `findFirst` en vez de `findUnique`: como la unicidad de `id` ya no alcanza
 | passwordHash | String | |
 | nombre | String | |
 | whatsappNumber | String? (unique) | número de WhatsApp vinculado; el bot lo usa para resolver a qué negocio pertenece un mensaje entrante |
-| esSuperAdmin | Boolean | privilegio de plataforma, no de negocio — habilita `POST /admin/negocios` (ver [Alta de negocios](#alta-de-negocios-admin)) |
+| esSuperAdmin | Boolean | privilegio de plataforma, no de negocio — habilita `POST /admin/negocios` (ver [Alta de negocios](#alta-de-negocios)) |
 | activo | Boolean | |
 | createdAt | DateTime | |
 
@@ -210,18 +213,27 @@ Login vía JWT (`src/auth`):
 - **El payload del JWT incluye `negocioId`** (`{ sub, email, negocioId }`) — es la fuente de verdad de a qué tenant pertenece cada request; todo `Controller` lo lee vía `@CurrentUser()` y lo pasa como primer parámetro a su `Service` (ver [Multi-tenancy](#multi-tenancy)). No hace falta ni se acepta un `negocioId` en el body o la URL de ningún endpoint de negocio.
 - **Todas las demás rutas están protegidas por default** vía un `JwtAuthGuard` global (`APP_GUARD` en `app.module.ts`). Para marcar una ruta como pública se usa el decorator `@Public()` (ver `src/auth/decorators/public.decorator.ts`), que el guard chequea con `Reflector` antes de exigir el token.
 - El token se manda como header `Authorization: Bearer <token>`. En Swagger UI (`/docs`), el botón **Authorize** permite pegar el token una vez y que se use en todos los requests de prueba.
-- Las contraseñas se guardan hasheadas con `bcrypt` (`passwordHash`, nunca en texto plano). El primer usuario de cada negocio se crea vía seed o vía `POST /admin/negocios` (ver [Alta de negocios](#alta-de-negocios-admin)) — no existe un endpoint de registro público (`POST /users`), a propósito: no hay auto-alta de cuentas en esta v1, el alta de un negocio nuevo la hace el dueño de la plataforma.
+- Las contraseñas se guardan hasheadas con `bcrypt` (`passwordHash`, nunca en texto plano). El primer usuario de cada negocio se crea vía seed, o vía `POST /negocios/registro` (self-service) o `POST /admin/negocios` (manual) — ver [Alta de negocios](#alta-de-negocios). No existe un `POST /users` público por separado: el alta de un `User` siempre va acompañada de la creación de su `Negocio`.
 - **`esSuperAdmin`** es un flag por `User`, independiente de a qué negocio pertenece — no es un rol dentro del negocio, es el privilegio de plataforma que habilita crear negocios nuevos. Un `User` normal (`esSuperAdmin: false`) nunca lo ve ni lo necesita.
 
-## Alta de negocios (admin)
+## Alta de negocios
 
-Cómo se crea un tenant nuevo (un cliente nuevo de esta plataforma):
+Cómo se crea un tenant nuevo (un cliente nuevo de esta plataforma) — hay dos caminos, ambos crean exactamente lo mismo (`Negocio` + su `User` dueño, en una única transacción vía `AdminService.crearNegocio()`):
 
-- `POST /admin/negocios` — protegido por `SuperAdminGuard` (`src/auth/guards/super-admin.guard.ts`), además del `JwtAuthGuard` global. Rechaza con `403` a cualquier usuario cuyo token no tenga `esSuperAdmin: true`.
-- Body (`CreateNegocioDto`): `nombreNegocio`, `ownerEmail`, `ownerPassword` (mínimo 8 caracteres), `ownerNombre`, `ownerWhatsappNumber?`.
-- Crea el `Negocio` y su primer `User` (el dueño de ese negocio, con `esSuperAdmin: false`) en una única transacción (`prisma.$transaction`) — si falla la creación del usuario, no queda un `Negocio` huérfano sin dueño.
-- Es deliberadamente **no self-service**: no hay una página pública de "creá tu cuenta". Para este modelo de negocio (vender a emprendedores textiles con poco tiempo/ganas de usar apps), el alta de un cliente nuevo la hace el operador de la plataforma a mano, llamando este endpoint desde Swagger UI (`/docs`) con su propio token de super-admin. No hace falta construir un frontend de alta para esto.
-- El primer super-admin de la plataforma se crea vía `prisma/seed.ts`, no vía este endpoint (ver [Variables de entorno](#variables-de-entorno)) — tiene que existir al menos un super-admin antes de poder llamar `POST /admin/negocios` la primera vez.
+- **`POST /negocios/registro`** — público, sin autenticación (`@Public()`), es el camino recomendado. El propio cliente completa el formulario de `/registro` en el panel web (o llama al endpoint directo) con `nombreNegocio`, `ownerNombre`, `ownerEmail`, `ownerPassword` (mínimo 8 caracteres) y `ownerWhatsappNumber?`, y queda de alta y logueado al instante. Limitado a 5 requests/minuto por IP (`@Throttle`, ver [Seguridad](#seguridad)).
+- **`POST /admin/negocios`** — protegido por `SuperAdminGuard` (`src/auth/guards/super-admin.guard.ts`) además del `JwtAuthGuard` global; rechaza con `403` a cualquier token sin `esSuperAdmin: true`. Es el **respaldo manual** para cuando el cliente no puede o no quiere autogestionarse — el operador de la plataforma lo da de alta a mano desde Swagger UI (`/docs`) con su propio token de super-admin.
+- Ninguno de los dos verifica el email — no hay servicio de envío de correo integrado todavía. Es una decisión consciente para esta etapa (ver historial de commits); si el spam de altas falsas se vuelve un problema, ahí conviene sumar verificación (ej. Resend, que tiene plan gratis hasta 3.000 emails/mes pero exige un dominio propio verificado).
+- El primer super-admin de la plataforma se crea vía `prisma/seed.ts`, no vía ninguno de estos dos endpoints (ver [Variables de entorno](#variables-de-entorno)) — tiene que existir al menos un super-admin antes de poder usar `POST /admin/negocios`.
+
+## Seguridad
+
+Prácticas puntuales de este proyecto, más allá de lo ya cubierto en [Autenticación](#autenticación) (JWT, bcrypt, aislamiento multi-tenant forzado por tipo):
+
+- **Rate limiting** (`@nestjs/throttler`, `src/app.module.ts`): límite global de 20 requests/minuto por IP, y un límite más estricto de 5/minuto en los endpoints públicos sensibles (`POST /auth/login`, `POST /negocios/registro`) vía `@Throttle()` por ruta — sin esto, cualquiera podía probar contraseñas por fuerza bruta o inundar el alta de cuentas falsas sin límite.
+- **Firma de Twilio verificada en el webhook** (`src/whatsapp/whatsapp.controller.ts`): `POST /whatsapp/webhook` valida el header `X-Twilio-Signature` con `validateRequest()` del SDK de Twilio antes de procesar cualquier mensaje, usando `TWILIO_AUTH_TOKEN` y la URL pública exacta (`PUBLIC_APP_URL`, ver [Variables de entorno](#variables-de-entorno)). Sin esto, cualquiera que supiera la URL del webhook y el número de WhatsApp de un dueño podía simular mensajes suyos y cargar movimientos falsos en su negocio — no hacía falta pasar por WhatsApp en absoluto. Requests sin firma válida se rechazan con `403` y no llegan a `ConversationService`.
+- `/auth/login` ya devolvía (antes de este cambio) el mismo mensaje genérico ("Credenciales inválidas") tanto si el email no existe como si la contraseña está mal — no filtra qué emails están registrados en la plataforma.
+- `CORS_ORIGIN` restringido a una lista explícita de orígenes, nunca abierto.
+- Prisma parametriza todas las queries — sin riesgo de SQL injection por diseño del ORM.
 
 ## Bot de WhatsApp
 
@@ -255,9 +267,10 @@ Pensado para que el dueño registre todo (compra de tela, entrega a una operaria
    ngrok http 3000
    ```
 5. En la consola de Twilio, en la config del sandbox ("Sandbox settings"), pegá `https://<tu-url-de-ngrok>/whatsapp/webhook` como **"WHEN A MESSAGE COMES IN"** (método `POST`).
-6. Levantá el backend (`npm run start:dev`) y escribile "hola" al número del sandbox desde tu WhatsApp. Debería responderte el menú.
+6. **Actualizá `PUBLIC_APP_URL` en tu `.env` con esa misma URL de ngrok** (sin barra final) — la validación de la firma de Twilio (ver [Seguridad](#seguridad)) compara byte a byte contra esta variable, así que si no coincide exactamente con la URL que Twilio usó para llamarte, rechaza el mensaje aunque sea 100% legítimo.
+7. Levantá el backend (`npm run start:dev`) y escribile "hola" al número del sandbox desde tu WhatsApp. Debería responderte el menú.
 
-> Nota: cada vez que reiniciás ngrok (versión gratuita) la URL cambia, así que hay que volver a pegarla en la consola de Twilio. Para no depender de esto en desarrollo, también podés probar el flujo sin WhatsApp real pegándole directo al webhook con `curl` (ver ejemplo en [Testing](#testing)).
+> Nota: cada vez que reiniciás ngrok (versión gratuita) la URL cambia, así que hay que volver a pegarla en la consola de Twilio **y en `PUBLIC_APP_URL`**.
 
 ## Panel web
 
@@ -288,7 +301,7 @@ Correr el seed o cualquier script puntual contra la base de producción **no fun
 
 [`docs/guia-de-uso.md`](docs/guia-de-uso.md) — instructivo en español, sin jerga técnica, pensado para la persona que usa el sistema día a día (no para quien lo desarrolla): cómo cargar movimientos por WhatsApp, qué muestra cada sección del panel web, dudas frecuentes.
 
-No incluye credenciales de acceso a propósito — cada negocio tiene su propio usuario/contraseña (ver [Alta de negocios](#alta-de-negocios-admin)), y ese dato no se versiona en el repositorio.
+No incluye credenciales de acceso a propósito — cada negocio tiene su propio usuario/contraseña (ver [Alta de negocios](#alta-de-negocios)), y ese dato no se versiona en el repositorio.
 
 ## Puesta en marcha (proyecto ya clonado)
 
@@ -328,6 +341,7 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | — | credenciales de la [consola de Twilio](https://console.twilio.com/) |
 | `TWILIO_WHATSAPP_FROM` | `whatsapp:+14155238886` | número de origen; el del sandbox por default |
 | `OWNER_WHATSAPP_NUMBER` | `whatsapp:+549...` | opcional; si se informa, `prisma/seed.ts` lo guarda como `User.whatsappNumber` del primer negocio. El bot resuelve el negocio de cada mensaje contra esta columna en runtime, no contra la variable de entorno (ver [Bot de WhatsApp](#bot-de-whatsapp)) |
+| `PUBLIC_APP_URL` | `https://backend-production-xxxx.up.railway.app` | URL pública del backend, **sin barra final** — Twilio la necesita para validar la firma del webhook (ver [Seguridad](#seguridad)). En local, la URL de ngrok si estás probando con Twilio real |
 
 `.env` está en `.gitignore`; `.env.example` es la plantilla versionada.
 
@@ -348,14 +362,17 @@ La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI)
 
 ## API — endpoints
 
-> Documentación interactiva completa (probar requests, ver schemas) en `/docs` una vez levantada la API. Lo que sigue es un resumen de referencia rápida. Todas las rutas salvo `POST /auth/login` requieren header `Authorization: Bearer <token>`. Todos los endpoints de negocio (items, operarios, movimientos, órdenes, stock) están scopeados automáticamente al `negocioId` del token — nunca hace falta, ni se acepta, pasarlo a mano.
+> Documentación interactiva completa (probar requests, ver schemas) en `/docs` una vez levantada la API. Lo que sigue es un resumen de referencia rápida. Todas las rutas salvo `POST /auth/login`, `POST /negocios/registro` y el webhook de WhatsApp requieren header `Authorization: Bearer <token>`. Todos los endpoints de negocio (items, operarios, movimientos, órdenes, stock) están scopeados automáticamente al `negocioId` del token — nunca hace falta, ni se acepta, pasarlo a mano. `/auth/login` y `/negocios/registro` están limitados a 5 requests/minuto por IP (ver [Seguridad](#seguridad)).
 
 **Auth** (`/auth`)
 - `POST /auth/login` — público. `{ email, password }` → `{ accessToken }` (payload incluye `negocioId`)
 - `GET /auth/me` — usuario autenticado actual
 
+**Negocios** (`/negocios`) — público, sin autenticación
+- `POST /negocios/registro` — alta self-service: crea un `Negocio` + su `User` dueño (`CreateNegocioDto`: `nombreNegocio`, `ownerEmail`, `ownerPassword`, `ownerNombre`, `ownerWhatsappNumber?`). Ver [Alta de negocios](#alta-de-negocios)
+
 **Admin** (`/admin`) — requiere `esSuperAdmin: true` en el token, si no `403`
-- `POST /admin/negocios` — crea un `Negocio` + su `User` dueño (`CreateNegocioDto`: `nombreNegocio`, `ownerEmail`, `ownerPassword`, `ownerNombre`, `ownerWhatsappNumber?`). Ver [Alta de negocios](#alta-de-negocios-admin)
+- `POST /admin/negocios` — mismo `CreateNegocioDto` que `/negocios/registro`; es el alta manual de respaldo. Ver [Alta de negocios](#alta-de-negocios)
 
 **Items** (`/items`)
 - `POST /items` — crear (`CreateItemDto`)
@@ -403,16 +420,9 @@ Tests unitarios de los `Service` (la capa con la lógica de negocio), con el `Re
 npm test
 ```
 
-Para probar el bot **sin** un WhatsApp real ni Twilio, se le puede pegar directo al webhook (mismo formato `x-www-form-urlencoded` que manda Twilio):
+**Pegarle directo al webhook con `curl` ya no alcanza**: desde que se valida la firma de Twilio (ver [Seguridad](#seguridad)), un `POST` sin el header `X-Twilio-Signature` correcto se rechaza con `403` — es la protección funcionando como debe. Para probar el flujo del bot de punta a punta, usá el Sandbox real de Twilio + ngrok (pasos en [Bot de WhatsApp](#bot-de-whatsapp)); es la única forma soportada de generar requests con firma válida.
 
-```bash
-curl -X POST http://localhost:3000/whatsapp/webhook \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "From=$OWNER_WHATSAPP_NUMBER" \
-  --data-urlencode "Body=hola"
-```
-
-Como la respuesta se manda por la API de Twilio (no queda en el body del `curl`), para ver qué contestó el bot conviene revisar los logs del servidor, o directamente la tabla `movimientos`/`ordenes_produccion` después de completar un flujo.
+Para ver qué contestó el bot en una prueba real, además de leer la respuesta en WhatsApp, se puede revisar los logs del servidor o directamente la tabla `movimientos`/`ordenes_produccion` después de completar un flujo.
 
 ## Troubleshooting
 
@@ -568,7 +578,7 @@ Para escalar de "un negocio" a "muchos negocios" (SaaS), sin cambiar de base de 
 - **Regla de diseño clave**: todo método de `Repository`/`Service` recibe `negocioId` como primer parámetro obligatorio — así TypeScript impide compilar una query que se olvide de filtrar por tenant (ver [Multi-tenancy](#multi-tenancy)).
 - `JwtPayload` y `AuthenticatedUser` suman `negocioId` (y `esSuperAdmin` si se quiere un rol de plataforma); `login()` lo incluye en el JWT firmado.
 - Migrar datos existentes de un proyecto de un solo negocio: no usar `prisma migrate dev` para el paso que agrega `negocioId NOT NULL` a una tabla con filas — falla de forma no interactiva porque no sabe qué valor default poner. Escribir la migración a mano: agregar la columna como nullable, hacer `UPDATE` con el id del negocio "legacy", después `ALTER COLUMN ... SET NOT NULL`. Aplicar con `npx prisma migrate resolve --rolled-back <nombre>` (si `migrate dev` ya la había marcado como fallida) seguido de `npx prisma migrate deploy`.
-- Módulo `admin` nuevo, con un `SuperAdminGuard` propio (chequea `request.user.esSuperAdmin`) y `POST /admin/negocios` para dar de alta un tenant + su primer usuario en una transacción (ver [Alta de negocios](#alta-de-negocios-admin)).
+- Módulo `admin` nuevo, con un `SuperAdminGuard` propio (chequea `request.user.esSuperAdmin`) y `AdminService.crearNegocio()` para dar de alta un tenant + su primer usuario en una transacción. `POST /admin/negocios` (super-admin) y `POST /negocios/registro` (público, módulo `negocios` aparte) llaman al mismo service — ver [Alta de negocios](#alta-de-negocios).
 - El bot de WhatsApp deja de comparar contra un número fijo en `.env` y pasa a resolver el `negocioId` buscando el `From` entrante contra `User.whatsappNumber` — así el mismo webhook atiende a todos los tenants.
 
 ### 13. Bot de WhatsApp
@@ -593,5 +603,5 @@ Este proyecto está armado para ser un punto de partida reusable. Para clonarlo 
 2. **Ajustar `Categoria`, `Unidad` y `MovimientoTipo`** en el enum de `schema.prisma` según el negocio — son la única parte realmente específica de "muñecos de tela". El resto (Controller/Service/Repository, motor de stock, validaciones) es genérico.
 3. **Revisar la lista `TIPOS_SALIDA`** en `src/stock/stock.service.ts` y `src/movimientos/movimientos.service.ts` si se agregan o quitan tipos de movimiento — es la fuente de verdad sobre qué tipo resta (todo lo que no es `TIPOS_SALIDA` ni `AJUSTE` suma).
 4. **Reemplazar `prisma/seed.ts`** por el catálogo real del nuevo negocio — pasarle el `negocioId` que devuelve `upsertNegocioYOwner()`, manteniendo el patrón `upsertItem`/`upsert<Entidad>` idempotente.
-5. **Multi-tenant**: ya no es trabajo pendiente — el sistema nació pensado para vender a múltiples emprendedores (ver [Multi-tenancy](#multi-tenancy)). Sumar un cliente nuevo no requiere tocar código, solo llamar `POST /admin/negocios` (ver [Alta de negocios](#alta-de-negocios-admin)).
+5. **Multi-tenant**: ya no es trabajo pendiente — el sistema nació pensado para vender a múltiples emprendedores (ver [Multi-tenancy](#multi-tenancy)). Sumar un cliente nuevo no requiere tocar código: se autogestiona en `POST /negocios/registro`, o se lo das de alta vos con `POST /admin/negocios` (ver [Alta de negocios](#alta-de-negocios)).
 6. **`docker-compose.yml` y `.env`**: cambiar `POSTGRES_DB`, nombre del contenedor y del volumen para que convivan varios proyectos de este tipo en la misma máquina sin pisarse.

@@ -119,7 +119,7 @@ describe('ConversationService', () => {
       'hola',
     );
 
-    expect(respuesta).toContain('Fauna de Tela');
+    expect(respuesta).toContain('StockAsist');
     expect(respuesta).toContain('1️⃣ Compra de tela');
   });
 
@@ -205,7 +205,7 @@ describe('ConversationService', () => {
 
     expect(movimientosService.create).not.toHaveBeenCalled();
     expect(respuesta).toContain('Cancelado');
-    expect(respuesta).toContain('Fauna de Tela');
+    expect(respuesta).toContain('StockAsist');
   });
 
   it('flujo entrega -> recepcion: vincula CONSUMO y PRODUCCION a la misma orden', async () => {
@@ -297,7 +297,7 @@ describe('ConversationService', () => {
 
     expect(respuesta).toContain('⚠️');
     expect(respuesta).toContain('Stock insuficiente');
-    expect(respuesta).toContain('Fauna de Tela');
+    expect(respuesta).toContain('StockAsist');
   });
 
   it('rechaza una seleccion fuera de rango sin romper la sesion', async () => {
@@ -305,7 +305,7 @@ describe('ConversationService', () => {
     const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '99');
 
     expect(respuesta).toContain('No entendí');
-    expect(respuesta).toContain('Fauna de Tela');
+    expect(respuesta).toContain('StockAsist');
   });
 
   it('"menu" y "0" reinician la conversacion desde cualquier paso', async () => {
@@ -317,7 +317,7 @@ describe('ConversationService', () => {
       TELEFONO,
       'menu',
     );
-    expect(respuestaMenu).toContain('Fauna de Tela');
+    expect(respuestaMenu).toContain('StockAsist');
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1');
     const respuestaCero = await service.manejarMensaje(
@@ -325,7 +325,7 @@ describe('ConversationService', () => {
       TELEFONO,
       '0',
     );
-    expect(respuestaCero).toContain('Fauna de Tela');
+    expect(respuestaCero).toContain('StockAsist');
   });
 
   it('flujo agregar operaria: pide el nombre, confirma y la crea', async () => {

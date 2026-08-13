@@ -9,7 +9,7 @@ import type {
   AuthenticatedUser,
 } from './types';
 
-const TOKEN_KEY = 'fauna_de_tela_token';
+const TOKEN_KEY = 'stockasist_token';
 
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -54,6 +54,18 @@ export async function login(email: string, password: string): Promise<string> {
 export async function fetchMe(): Promise<AuthenticatedUser> {
   const { data } = await api.get<AuthenticatedUser>('/auth/me');
   return data;
+}
+
+export interface RegistroNegocioPayload {
+  nombreNegocio: string;
+  ownerNombre: string;
+  ownerEmail: string;
+  ownerPassword: string;
+  ownerWhatsappNumber?: string;
+}
+
+export async function registrarNegocio(payload: RegistroNegocioPayload): Promise<void> {
+  await api.post('/negocios/registro', payload);
 }
 
 export async function fetchItems(): Promise<Item[]> {

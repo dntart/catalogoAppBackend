@@ -25,7 +25,7 @@ import { OrdenesProduccionService } from '../../ordenes-produccion/ordenes-produ
 import { StockService } from '../../stock/stock.service';
 
 const MENSAJE_MENU = [
-  '👋 *Fauna de Tela*',
+  '👋 *StockAsist*',
   '¿Qué querés registrar? Respondé con el número:',
   '',
   '1️⃣ Compra de tela',

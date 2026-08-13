@@ -19,11 +19,15 @@ async function bootstrap() {
   );
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Fauna de Tela API')
-    .setDescription('Gestión de producción e inventario para Fauna de Tela')
+    .setTitle('StockAsist API')
+    .setDescription(
+      'Gestión de producción e inventario multi-tenant para emprendimientos textiles',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .addTag('auth', 'Login del dueño del emprendimiento')
+    .addTag('negocios', 'Alta self-service de un negocio nuevo')
+    .addTag('admin', 'Alta manual de negocios (respaldo, solo super-admin)')
     .addTag('items', 'Catálogo de materiales y productos')
     .addTag('operarios', 'Personas que registran movimientos')
     .addTag(

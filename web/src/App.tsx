@@ -1,6 +1,7 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from './auth/AuthContext';
 import { LoginPage } from './auth/LoginPage';
+import { RegistroPage } from './auth/RegistroPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { ResumenPage } from './pages/ResumenPage';
@@ -15,6 +16,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/registro" element={<RegistroPage />} />
           <Route
             element={
               <ProtectedRoute>
