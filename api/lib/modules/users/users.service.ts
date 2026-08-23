@@ -1,0 +1,22 @@
+import { Prisma, User } from '@prisma/client';
+import { UsersRepository } from './users.repository';
+
+export class UsersService {
+  constructor(private readonly usersRepository: UsersRepository) {}
+
+  findByEmail(email: string): Promise<User | null> {
+    return this.usersRepository.findByEmail(email);
+  }
+
+  findById(id: string): Promise<User | null> {
+    return this.usersRepository.findById(id);
+  }
+
+  findByWhatsappNumber(whatsappNumber: string): Promise<User | null> {
+    return this.usersRepository.findByWhatsappNumber(whatsappNumber);
+  }
+
+  create(data: Prisma.UserCreateInput): Promise<User> {
+    return this.usersRepository.create(data);
+  }
+}

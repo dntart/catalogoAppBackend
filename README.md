@@ -289,13 +289,16 @@ Pensado para que el dueño registre todo (compra de tela, entrega a una operaria
 
 ## Deploy en producción
 
-El sistema corre 24/7 en la nube, no depende de que una PC esté prendida:
+El sistema corre 24/7 en la nube, todo dentro de dos proveedores (Vercel + Supabase) para poder compartir infraestructura con otros SaaS del mismo dueño — ver [`api/README.md`](api/README.md) para el detalle completo del backend:
 
-- **Backend + Postgres**: [Railway](https://railway.app/). El backend se despliega con un `Dockerfile` propio (no con el builder automático de Railway — Railpack no incluía el build compilado en la imagen final, ver comentario en el `Dockerfile`). El comando de arranque (`railway:start` en `package.json`) corre `prisma migrate deploy` antes de levantar el server, así cada deploy aplica migraciones pendientes solo.
-- **Frontend**: [Vercel](https://vercel.com/), deploy está atado a `VITE_API_URL` seteada como variable de entorno de build en el proyecto de Vercel.
-- **Bot de WhatsApp**: mismo backend de Railway, expuesto vía Twilio (webhook apuntando a `<url-de-railway>/whatsapp/webhook`).
+- **Backend**: [Vercel](https://vercel.com/) — proyecto aparte (`api/`, Next.js API routes, sin páginas), en la **misma cuenta de Vercel** que el frontend. `https://stockasist-api.vercel.app`.
+- **Frontend**: [Vercel](https://vercel.com/) — proyecto `web/` (Vite + React), deploy atado a `VITE_API_URL` (variable de build) apuntando al backend de arriba.
+- **Base de datos**: [Supabase](https://supabase.com/) — un solo proyecto Postgres compartido, `stockasist` vive en su propio **schema** (no una base separada) para poder convivir con otros SaaS en el mismo proyecto de Supabase sin chocar.
+- **Bot de WhatsApp**: mismo backend de Vercel, expuesto vía Twilio (webhook apuntando a `<url-del-backend>/api/whatsapp/webhook`).
 
-Correr el seed o cualquier script puntual contra la base de producción **no funciona desde la máquina local** — `DATABASE_URL` en Railway usa el hostname interno `postgres.railway.internal`, que solo resuelve dentro de la red privada de Railway. Para eso: `railway ssh -- <comando>` (ejecuta el comando dentro del contenedor del backend, que sí tiene acceso a esa red). Necesita una clave SSH registrada una vez (`railway ssh keys add`).
+> **Nota histórica**: el backend corrió en NestJS sobre Railway hasta que se migró a Next.js API routes sobre Vercel — decisión tomada para alinear el proyecto a una arquitectura que se pueda compartir entre varios SaaS del mismo dueño (ver skill `saas-shared-infra`). El código NestJS/Railway sigue en la raíz del repo por ahora [ver [Cómo se construyó](#cómo-se-construyó-desde-cero-guía-de-replicación) para ese historial], pero no es lo que corre en producción.
+
+Correr el seed o cualquier script puntual contra la base de producción se hace directo con `DATABASE_URL` (Supabase es alcanzable por internet, a diferencia de Railway antes) — no hace falta `ssh` ni túneles.
 
 ## Guía de uso para el dueño del negocio
 

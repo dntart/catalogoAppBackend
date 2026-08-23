@@ -1,0 +1,75 @@
+import { NotFoundError as NotFoundException } from '../../auth';
+import { Operario } from '@prisma/client';
+import { OperariosService } from './operarios.service';
+import { OperariosRepository } from './operarios.repository';
+
+const NEGOCIO_ID = 'negocio-1';
+const OPERARIO_MOCK = { id: 'operario-1', nombre: 'María' } as Operario;
+
+describe('OperariosService', () => {
+  let service: OperariosService;
+  let repository: {
+    create: jest.Mock;
+    findAll: jest.Mock;
+    findById: jest.Mock;
+    update: jest.Mock;
+  };
+
+  beforeEach(() => {
+    repository = {
+      create: jest.fn(),
+      findAll: jest.fn(),
+      findById: jest.fn(),
+      update: jest.fn(),
+    };
+    service = new OperariosService(
+      repository as unknown as OperariosRepository,
+    );
+  });
+
+  it('crea un operario', async () => {
+    repository.create.mockResolvedValue(OPERARIO_MOCK);
+
+    await service.create(NEGOCIO_ID, { nombre: 'María' });
+
+    expect(repository.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      nombre: 'María',
+    });
+  });
+
+  it('lanza NotFoundException si el operario no existe', async () => {
+    repository.findById.mockResolvedValue(null);
+
+    await expect(service.findOne(NEGOCIO_ID, 'no-existe')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('devuelve el operario cuando existe', async () => {
+    repository.findById.mockResolvedValue(OPERARIO_MOCK);
+
+    await expect(service.findOne(NEGOCIO_ID, 'operario-1')).resolves.toEqual(
+      OPERARIO_MOCK,
+    );
+  });
+
+  it('update verifica existencia antes de actualizar', async () => {
+    repository.findById.mockResolvedValue(OPERARIO_MOCK);
+    repository.update.mockResolvedValue(OPERARIO_MOCK);
+
+    await service.update(NEGOCIO_ID, 'operario-1', { activo: false });
+
+    expect(repository.update).toHaveBeenCalledWith('operario-1', {
+      activo: false,
+    });
+  });
+
+  it('update lanza NotFoundException si el operario no existe', async () => {
+    repository.findById.mockResolvedValue(null);
+
+    await expect(
+      service.update(NEGOCIO_ID, 'no-existe', { activo: false }),
+    ).rejects.toThrow(NotFoundException);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+});

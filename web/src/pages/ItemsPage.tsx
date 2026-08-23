@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { createItem, fetchItems, fetchStockResumen } from '../lib/api';
 import type { Categoria, Item, ResumenStockItem, Unidad } from '../lib/types';
 
@@ -9,6 +9,8 @@ export function ItemsPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [resumenPorItem, setResumenPorItem] = useState<Record<string, ResumenStockItem>>({});
   const [loading, setLoading] = useState(true);
+  const [busqueda, setBusqueda] = useState('');
+  const [grupo, setGrupo] = useState('');
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState<Categoria>('MATERIAL');
   const [unidad, setUnidad] = useState<Unidad>('METRO');
@@ -35,12 +37,14 @@ export function ItemsPage() {
     setSubmitting(true);
     try {
       await createItem({
+        grupo: grupo.trim() || undefined,
         nombre,
         categoria,
         unidad,
         tieneColor,
         colorNombre: tieneColor ? colorNombre : undefined,
       });
+      setGrupo('');
       setNombre('');
       setColorNombre('');
       setTieneColor(false);
@@ -52,11 +56,33 @@ export function ItemsPage() {
     }
   }
 
+  const itemsFiltrados = useMemo(() => {
+    const t = busqueda.trim().toLowerCase();
+    if (!t) return items;
+    return items.filter(
+      (item) =>
+        item.nombre.toLowerCase().includes(t) ||
+        item.codigo.toLowerCase().includes(t) ||
+        (item.grupo?.toLowerCase().includes(t) ?? false) ||
+        (item.colorNombre?.toLowerCase().includes(t) ?? false),
+    );
+  }, [items, busqueda]);
+
   return (
     <div className="space-y-8">
       <section>
         <h2 className="mb-3 text-lg font-semibold text-stone-800">Nuevo item</h2>
         <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 rounded-lg bg-white p-4 shadow-sm">
+          <div>
+            <label className="mb-1 block text-xs text-stone-500">
+              Grupo <span className="text-stone-400">(opcional, ej: Hilo)</span>
+            </label>
+            <input
+              value={grupo}
+              onChange={(e) => setGrupo(e.target.value)}
+              className="rounded border border-stone-300 px-2 py-1.5"
+            />
+          </div>
           <div>
             <label className="mb-1 block text-xs text-stone-500">Nombre</label>
             <input
@@ -121,7 +147,16 @@ export function ItemsPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-stone-800">Catálogo</h2>
+        <div className="mb-3 flex items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold text-stone-800">Catálogo</h2>
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            placeholder="Buscar por nombre, código, grupo o color..."
+            className="w-72 rounded border border-stone-300 px-3 py-1.5 text-sm focus:border-stone-500 focus:outline-none"
+          />
+        </div>
         {loading ? (
           <p className="text-stone-500">Cargando...</p>
         ) : (
@@ -130,6 +165,7 @@ export function ItemsPage() {
               <thead className="bg-stone-100 text-stone-600">
                 <tr>
                   <th className="px-4 py-2">Código</th>
+                  <th className="px-4 py-2">Grupo</th>
                   <th className="px-4 py-2">Nombre</th>
                   <th className="px-4 py-2">Categoría</th>
                   <th className="px-4 py-2">Unidad</th>
@@ -139,11 +175,12 @@ export function ItemsPage() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => {
+                {itemsFiltrados.map((item) => {
                   const resumen = resumenPorItem[item.id];
                   return (
                     <tr key={item.id} className="border-t border-stone-100">
                       <td className="px-4 py-2 font-mono text-xs text-stone-500">{item.codigo}</td>
+                      <td className="px-4 py-2 text-stone-500">{item.grupo ?? '—'}</td>
                       <td className="px-4 py-2">{item.nombre}</td>
                       <td className="px-4 py-2">{item.categoria}</td>
                       <td className="px-4 py-2">{item.unidad}</td>
@@ -166,6 +203,13 @@ export function ItemsPage() {
                     </tr>
                   );
                 })}
+                {itemsFiltrados.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-6 text-center text-stone-500">
+                      Ningún item coincide con "{busqueda}".
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
