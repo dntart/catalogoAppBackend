@@ -497,10 +497,17 @@ describe('ConversationService', () => {
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Metro
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'Pana');
+    const pideNombreGrupo = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      'si', // pertenece a un grupo
+    );
+    expect(pideNombreGrupo).toContain('grupo');
+
     const pideTieneColor = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
-      'Telares', // grupo
+      'Telares', // nombre del grupo
     );
     expect(pideTieneColor).toContain('color');
 

@@ -8,6 +8,15 @@ import {
 } from '../../../../lib/container';
 import { FlowStep } from '../../../../lib/modules/whatsapp/conversation/types';
 
+/// Pasos donde la pregunta pendiente es sí/no — se ofrecen con los botones
+/// táctiles de la plantilla de Quick Reply en vez de pedir que se escriba
+/// a mano.
+const PASOS_CON_BOTONES_SI_NO: FlowStep[] = [
+  FlowStep.CONFIRMAR,
+  FlowStep.NUEVO_ITEM_TIENE_GRUPO,
+  FlowStep.NUEVO_ITEM_TIENE_COLOR,
+];
+
 /**
  * Rechaza cualquier request que no venga firmado por Twilio — sin esto,
  * cualquiera que supiera esta URL y un número registrado podría simular
@@ -49,11 +58,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // manejarMensaje ya persistió la sesión antes de devolver la respuesta
     // (guardado único al final de la conversación) — releerla acá es barato
-    // y nos dice, sin tocar la lógica conversacional, si lo que hay que
-    // mandar es una confirmación (para ofrecerla con botones Sí/No en vez
-    // de pedir que se escriba a mano).
+    // y nos dice, sin tocar la lógica conversacional, si el próximo paso es
+    // una pregunta sí/no (para ofrecerla con botones táctiles en vez de
+    // pedir que se escriba a mano).
     const sesion = await sessionStoreService.obtener(from);
-    if (sesion.step === FlowStep.CONFIRMAR) {
+    if (PASOS_CON_BOTONES_SI_NO.includes(sesion.step)) {
       await whatsappService.enviarConfirmacion(from, respuesta);
     } else {
       await whatsappService.enviarMensaje(from, respuesta);

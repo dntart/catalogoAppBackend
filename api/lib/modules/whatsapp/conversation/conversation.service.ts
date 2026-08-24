@@ -247,6 +247,9 @@ export class ConversationService {
         case FlowStep.NUEVO_ITEM_NOMBRE:
           respuesta = this.manejarNuevoItemNombre(telefono, texto, session);
           break;
+        case FlowStep.NUEVO_ITEM_TIENE_GRUPO:
+          respuesta = this.manejarNuevoItemTieneGrupo(telefono, texto, session);
+          break;
         case FlowStep.NUEVO_ITEM_GRUPO:
           respuesta = this.manejarNuevoItemGrupo(telefono, texto, session);
           break;
@@ -1037,9 +1040,32 @@ export class ConversationService {
     }
 
     session.nuevoItemNombre = nombre;
-    session.step = FlowStep.NUEVO_ITEM_GRUPO;
+    session.step = FlowStep.NUEVO_ITEM_TIENE_GRUPO;
 
-    return '¿Pertenece a algún grupo? (ej: "Hilo", para agrupar Poliéster/Algodón/etc.) Respondé "no" si no aplica.';
+    return '¿Pertenece a algún grupo? (ej: "Hilo", para agrupar Poliéster/Algodón/etc.)';
+  }
+
+  /// Pregunta booleana separada del nombre del grupo en sí — así se puede
+  /// contestar con los botones táctiles Sí/No en vez de tener que escribir
+  /// "no" a mano cuando no aplica.
+  private manejarNuevoItemTieneGrupo(
+    telefono: string,
+    texto: string,
+    session: WhatsappSession,
+  ): string {
+    const respuesta = normalizarSiNo(texto);
+    if (respuesta === null) {
+      return 'Respondé sí o no.';
+    }
+
+    if (!respuesta) {
+      session.nuevoItemGrupo = null;
+      session.step = FlowStep.NUEVO_ITEM_TIENE_COLOR;
+      return '¿Tiene color?';
+    }
+
+    session.step = FlowStep.NUEVO_ITEM_GRUPO;
+    return '¿Cómo se llama el grupo? (ej: Hilo)';
   }
 
   private manejarNuevoItemGrupo(
@@ -1047,15 +1073,15 @@ export class ConversationService {
     texto: string,
     session: WhatsappSession,
   ): string {
-    const respuesta = texto.trim();
-    if (!respuesta) {
-      return 'Ingresá un grupo, o "no" si no aplica.';
+    const grupo = texto.trim();
+    if (!grupo) {
+      return 'Ingresá un nombre de grupo válido.';
     }
 
-    session.nuevoItemGrupo = respuesta.toLowerCase() === 'no' ? null : respuesta;
+    session.nuevoItemGrupo = grupo;
     session.step = FlowStep.NUEVO_ITEM_TIENE_COLOR;
 
-    return '¿Tiene color? Respondé si o no.';
+    return '¿Tiene color?';
   }
 
   private manejarNuevoItemTieneColor(
@@ -1063,12 +1089,12 @@ export class ConversationService {
     texto: string,
     session: WhatsappSession,
   ): string {
-    const respuesta = texto.trim().toLowerCase();
-    if (respuesta !== 'si' && respuesta !== 'sí' && respuesta !== 'no') {
-      return 'Respondé si o no.';
+    const respuesta = normalizarSiNo(texto);
+    if (respuesta === null) {
+      return 'Respondé sí o no.';
     }
 
-    if (respuesta === 'no') {
+    if (!respuesta) {
       return this.finalizarDatosNuevoItem(session, null);
     }
 
