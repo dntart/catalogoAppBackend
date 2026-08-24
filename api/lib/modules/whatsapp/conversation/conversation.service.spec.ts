@@ -166,7 +166,7 @@ describe('ConversationService', () => {
     );
 
     expect(respuesta).toContain('StockAsist');
-    expect(respuesta).toContain('1️⃣ Compra de tela');
+    expect(respuesta).toContain('1️⃣ Compra de material');
   });
 
   it('flujo de compra con color: nombre -> color -> cantidad -> confirmar -> registra', async () => {
@@ -176,13 +176,14 @@ describe('ConversationService', () => {
       TELEFONO,
       '1',
     );
+    expect(listadoNombres).toContain('➕ Cargar nuevo material');
     expect(listadoNombres).toContain('Gabardina');
     expect(listadoNombres).not.toContain('Beige');
 
     const listadoColores = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
-      '1',
+      '2', // Gabardina (1 es "cargar nuevo material")
     );
     expect(listadoColores).toContain('Beige');
     expect(listadoColores).toContain('Negro');
@@ -255,6 +256,7 @@ describe('ConversationService', () => {
       '1', // compra
     );
     // Gabardina no tiene grupo -> aparece como "Otros"; Hilo si tiene grupo.
+    expect(listadoGrupos).toContain('➕ Cargar nuevo material');
     expect(listadoGrupos).toContain('Hilo');
     expect(listadoGrupos).toContain('Otros');
     expect(listadoGrupos).not.toContain('Poliéster');
@@ -262,7 +264,7 @@ describe('ConversationService', () => {
     const listadoNombres = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
-      '1', // grupo "Hilo"
+      '2', // grupo "Hilo" (1 es "cargar nuevo material")
     );
     expect(listadoNombres).toContain('Poliéster');
     expect(listadoNombres).toContain('Algodón');
@@ -305,8 +307,8 @@ describe('ConversationService', () => {
   it('flujo entrega -> recepcion: vincula CONSUMO y PRODUCCION a la misma orden', async () => {
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // entrega de material
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // selecciona a María
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Gabardina
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // selecciona a María (1 es "cargar operaria nueva")
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Gabardina (1 es "cargar nuevo material")
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Beige
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '5'); // cantidad
     const confirmacionEntrega = await service.manejarMensaje(
@@ -323,6 +325,7 @@ describe('ConversationService', () => {
       itemId: 'item-gabardina-beige',
       tipo: MovimientoTipo.CONSUMO,
       cantidad: 5,
+      operarioId: 'operario-maria',
       ordenProduccionId: 'orden-1',
     });
     expect(confirmacionEntrega).toContain('Registrado');
@@ -352,13 +355,13 @@ describe('ConversationService', () => {
     const listadoOrdenes = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
-      '1',
-    ); // selecciona a María
+      '2', // selecciona a María (1 es "cargar operaria nueva")
+    );
     expect(listadoOrdenes).toContain('Sin vincular');
     expect(listadoOrdenes).toContain('Gabardina Beige');
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // selecciona la entrega abierta (no "sin vincular")
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Zorro
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Zorro (1 es "cargar nuevo producto")
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '3'); // cantidad
     const confirmacionRecepcion = await service.manejarMensaje(
       NEGOCIO_ID,
@@ -422,58 +425,33 @@ describe('ConversationService', () => {
     expect(respuestaCero).toContain('StockAsist');
   });
 
-  it('flujo agregar operaria: pide el nombre, confirma y la crea', async () => {
-    operariosService.create.mockResolvedValue({
-      id: 'operario-lujan',
-      nombre: 'Luján',
-    });
-
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    const pideNombre = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '7');
-    expect(pideNombre).toContain('¿Cómo se llama');
-
-    const pideConfirmacion = await service.manejarMensaje(
-      NEGOCIO_ID,
-      TELEFONO,
-      'Luján',
-    );
-    expect(pideConfirmacion).toContain('Confirmás');
-    expect(operariosService.create).not.toHaveBeenCalled();
-
-    const confirmacion = await service.manejarMensaje(
-      NEGOCIO_ID,
-      TELEFONO,
-      'si',
-    );
-
-    expect(operariosService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
-      nombre: 'Luján',
-    });
-    expect(confirmacion).toContain('Operaria agregada');
-    expect(confirmacion).toContain('Luján');
-  });
-
-  it('flujo agregar item sin color: pide categoria, unidad, nombre, confirma y crea el item', async () => {
+  it('compra de material: catálogo vacío ofrece cargar el material directo, sin listas', async () => {
+    itemsService.findAll.mockResolvedValue([]);
     itemsService.create.mockResolvedValue({
       id: 'item-vellon',
       nombre: 'Vellón',
       colorNombre: null,
       unidad: Unidad.KG,
+      categoria: Categoria.MATERIAL,
     });
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '8');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // material
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // unidad: Kg
+    const pideUnidad = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1');
+    expect(pideUnidad).toContain('Unidad de medida');
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Kg
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'Vellón');
-    const pideGrupo = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'no'); // sin grupo
-    expect(pideGrupo).toContain('color');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'no'); // sin grupo
+    const pideCantidad = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'no'); // sin color
+    expect(pideCantidad).toContain('Vellón');
+    expect(pideCantidad).toContain('cantidad');
 
     const pideConfirmacion = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
-      'no',
-    ); // sin color
+      '10',
+    );
+    expect(pideConfirmacion).toContain('agregar el material *Vellón*');
     expect(pideConfirmacion).toContain('Confirmás');
     expect(itemsService.create).not.toHaveBeenCalled();
 
@@ -491,21 +469,33 @@ describe('ConversationService', () => {
       tieneColor: false,
       colorNombre: undefined,
     });
-    expect(confirmacion).toContain('Item agregado');
+    expect(movimientosService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      itemId: 'item-vellon',
+      tipo: MovimientoTipo.COMPRA,
+      cantidad: 10,
+    });
+    expect(confirmacion).toContain('Material agregado');
+    expect(confirmacion).toContain('Registrado');
   });
 
-  it('flujo agregar item con color: pide el color antes de confirmar', async () => {
+  it('compra de material: elegir "cargar nuevo material" desde el catálogo existente, con color, confirma todo junto', async () => {
     itemsService.create.mockResolvedValue({
-      id: 'item-pana',
+      id: 'item-pana-negro',
       nombre: 'Pana',
       colorNombre: 'Negro',
       unidad: Unidad.METRO,
+      categoria: Categoria.MATERIAL,
     });
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '8');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // material
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // unidad: Metro
+    const listado = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1');
+    expect(listado).toContain('➕ Cargar nuevo material');
+    expect(listado).toContain('Gabardina');
+
+    const pideUnidad = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // sentinel
+    expect(pideUnidad).toContain('Unidad de medida');
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Metro
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'Pana');
     const pideTieneColor = await service.manejarMensaje(
       NEGOCIO_ID,
@@ -517,13 +507,21 @@ describe('ConversationService', () => {
     const pideColor = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'si');
     expect(pideColor).toContain('color');
 
-    const pideConfirmacion = await service.manejarMensaje(
+    const pideCantidad = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
       'Negro',
     );
-    expect(pideConfirmacion).toContain('Confirmás');
-    expect(pideConfirmacion).toContain('Telares');
+    expect(pideCantidad).toContain('Pana Negro');
+
+    const pideConfirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      '8',
+    );
+    expect(pideConfirmacion).toContain('agregar el material *Pana Negro*');
+    expect(pideConfirmacion).toContain('compra');
+    expect(itemsService.create).not.toHaveBeenCalled();
 
     const confirmacion = await service.manejarMensaje(
       NEGOCIO_ID,
@@ -539,10 +537,134 @@ describe('ConversationService', () => {
       tieneColor: true,
       colorNombre: 'Negro',
     });
-    expect(confirmacion).toContain('Item agregado');
+    expect(movimientosService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      itemId: 'item-pana-negro',
+      tipo: MovimientoTipo.COMPRA,
+      cantidad: 8,
+    });
+    expect(confirmacion).toContain('Material agregado');
+    expect(confirmacion).toContain('Registrado');
   });
 
-  it('opcion 9 muestra los ultimos movimientos con nombre de item y signo segun tipo', async () => {
+  it('entrega: elegir "cargar operaria nueva" crea la operaria, sigue pidiendo el material y confirma todo junto', async () => {
+    operariosService.create.mockResolvedValue({
+      id: 'operario-lujan',
+      nombre: 'Luján',
+    });
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // entrega
+    const pideNombre = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // sentinel "cargar operaria nueva"
+    expect(pideNombre).toContain('¿Cómo se llama la nueva operaria?');
+
+    const listadoMateriales = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      'Luján',
+    );
+    expect(listadoMateriales).toContain('Gabardina');
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Gabardina (1 es "cargar nuevo material")
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Beige
+    const pideConfirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      '5',
+    ); // cantidad
+    expect(pideConfirmacion).toContain('agregar a *Luján* como operaria');
+    expect(pideConfirmacion).toContain('Confirmás');
+    expect(operariosService.create).not.toHaveBeenCalled();
+
+    const confirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      'si',
+    );
+
+    expect(operariosService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      nombre: 'Luján',
+    });
+    expect(ordenesProduccionService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      operarioId: 'operario-lujan',
+      observaciones: 'Entrega registrada por WhatsApp',
+    });
+    expect(movimientosService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      itemId: 'item-gabardina-beige',
+      tipo: MovimientoTipo.CONSUMO,
+      cantidad: 5,
+      operarioId: 'operario-lujan',
+      ordenProduccionId: 'orden-1',
+    });
+    expect(confirmacion).toContain('Operaria agregada: Luján');
+    expect(confirmacion).toContain('Registrado');
+  });
+
+  it('entrega: operaria nueva y material nuevo en la misma transacción, con una sola confirmación', async () => {
+    itemsService.create.mockResolvedValue({
+      id: 'item-hilo-especial',
+      nombre: 'Hilo Especial',
+      colorNombre: null,
+      unidad: Unidad.CONO,
+      categoria: Categoria.MATERIAL,
+    });
+    operariosService.create.mockResolvedValue({
+      id: 'operario-lujan',
+      nombre: 'Luján',
+    });
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // entrega
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // sentinel operaria nueva
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'Luján');
+    const pideUnidad = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // sentinel material nuevo
+    expect(pideUnidad).toContain('Unidad de medida');
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '3'); // Cono
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'Hilo Especial');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'no'); // sin grupo
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'no'); // sin color
+    const pideConfirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      '4',
+    ); // cantidad
+    expect(pideConfirmacion).toContain('agregar el material *Hilo Especial*');
+    expect(pideConfirmacion).toContain('agregar a *Luján* como operaria');
+
+    const confirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      'si',
+    );
+
+    expect(itemsService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      grupo: undefined,
+      nombre: 'Hilo Especial',
+      categoria: Categoria.MATERIAL,
+      unidad: Unidad.CONO,
+      tieneColor: false,
+      colorNombre: undefined,
+    });
+    expect(operariosService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      nombre: 'Luján',
+    });
+    expect(ordenesProduccionService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      operarioId: 'operario-lujan',
+      observaciones: 'Entrega registrada por WhatsApp',
+    });
+    expect(movimientosService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      itemId: 'item-hilo-especial',
+      tipo: MovimientoTipo.CONSUMO,
+      cantidad: 4,
+      operarioId: 'operario-lujan',
+      ordenProduccionId: 'orden-1',
+    });
+    expect(confirmacion).toContain('Material agregado');
+    expect(confirmacion).toContain('Operaria agregada');
+    expect(confirmacion).toContain('Registrado');
+  });
+
+  it('opcion 7 muestra los ultimos movimientos con nombre de item y signo segun tipo', async () => {
     movimientosService.findAll.mockResolvedValue([
       {
         fecha: new Date('2026-07-20'),
@@ -559,7 +681,7 @@ describe('ConversationService', () => {
     ]);
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '9');
+    const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '7');
 
     expect(respuesta).toContain('Gabardina Beige');
     expect(respuesta).toContain('+10.00');

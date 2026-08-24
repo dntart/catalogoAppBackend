@@ -15,6 +15,8 @@ import {
   AccionMovimientoPendiente,
   AccionPendiente,
   FlowStep,
+  ItemNuevoPayload,
+  MovimientoPayload,
   OpcionListado,
   WhatsappSession,
   nuevaSesion,
@@ -29,18 +31,24 @@ const MENSAJE_MENU = [
   '👋 *StockAsist*',
   '¿Qué querés registrar? Respondé con el número:',
   '',
-  '1️⃣ Compra de tela',
+  '1️⃣ Compra de material',
   '2️⃣ Entrega de material a operaria',
   '3️⃣ Recepción de producto terminado',
   '4️⃣ Venta',
   '5️⃣ Ajuste de stock',
   '6️⃣ Ver stock',
-  '7️⃣ Agregar operaria nueva',
-  '8️⃣ Agregar material o producto nuevo',
-  '9️⃣ Ver últimos movimientos',
+  '7️⃣ Ver últimos movimientos',
   '',
   '_Escribí "0" o "menu" en cualquier momento para volver acá._',
 ].join('\n');
+
+/// Opciones "cargar nuevo ..." que se anteponen a las listas de selección en
+/// los flujos donde tiene sentido crear algo sobre la marcha (compra,
+/// entrega, recepción) — así el usuario no tiene que salir al menú principal
+/// y volver a entrar para cargar un material/producto/operaria que todavía
+/// no existe.
+const SENTINEL_NUEVO_ITEM = '__nuevo_item__';
+const SENTINEL_NUEVA_OPERARIA = '__nueva_operaria__';
 
 const UNIDADES: { opcion: string; valor: Unidad; etiqueta: string }[] = [
   { opcion: '1', valor: Unidad.METRO, etiqueta: 'Metro' },
@@ -59,6 +67,27 @@ function etiquetaItem(item: Item): string {
     ? `${item.nombre} ${item.colorNombre}`
     : item.nombre;
   return `${nombre} (${item.unidad.toLowerCase()})`;
+}
+
+function etiquetaItemNuevo(item: ItemNuevoPayload): string {
+  return item.colorNombre ? `${item.nombre} ${item.colorNombre}` : item.nombre;
+}
+
+/** Junta los datos del item que se venía armando paso a paso (nombre, grupo,
+ * unidad, color) en el payload que hay que crear antes de registrar el
+ * movimiento — se usa cuando se eligió "cargar nuevo ..." dentro de compra
+ * o recepción en vez de un item ya existente. */
+function armarItemNuevoPendiente(
+  session: WhatsappSession,
+  categoria: Categoria,
+): ItemNuevoPayload {
+  return {
+    grupo: session.nuevoItemGrupo ?? null,
+    nombre: session.nuevoItemNombre!,
+    categoria,
+    unidad: session.nuevoItemUnidad!,
+    colorNombre: session.nuevoItemColorNombre ?? null,
+  };
 }
 
 function construirListado(opciones: OpcionListado[]): string {
@@ -205,10 +234,12 @@ export class ConversationService {
           respuesta = await this.finalizarStock(negocioId, telefono, texto, session);
           break;
         case FlowStep.NUEVA_OPERARIA_NOMBRE:
-          respuesta = this.prepararNuevaOperaria(telefono, texto, session);
-          break;
-        case FlowStep.NUEVO_ITEM_CATEGORIA:
-          respuesta = this.manejarNuevoItemCategoria(telefono, texto, session);
+          respuesta = await this.manejarNuevaOperariaNombre(
+            negocioId,
+            telefono,
+            texto,
+            session,
+          );
           break;
         case FlowStep.NUEVO_ITEM_UNIDAD:
           respuesta = this.manejarNuevoItemUnidad(telefono, texto, session);
@@ -272,6 +303,7 @@ export class ConversationService {
           Categoria.MATERIAL,
           FlowStep.COMPRA_CANTIDAD,
           '¿Qué material compraste?',
+          true,
         );
       case '2':
         return this.pedirOperario(
@@ -279,6 +311,7 @@ export class ConversationService {
           session,
           FlowStep.ENTREGA_OPERARIO,
           '¿A qué operaria le entregás material?',
+          true,
         );
       case '3':
         return this.pedirOperario(
@@ -286,6 +319,7 @@ export class ConversationService {
           session,
           FlowStep.RECEPCION_OPERARIO,
           '¿Qué operaria trae el producto terminado?',
+          true,
         );
       case '4':
         return this.pedirItem(
@@ -308,17 +342,7 @@ export class ConversationService {
         session.opciones = [];
         return '¿Stock de qué querés ver?\n1. Materiales\n2. Productos\n3. Todo';
       }
-      case '7': {
-        session.step = FlowStep.NUEVA_OPERARIA_NOMBRE;
-        session.opciones = [];
-        return '¿Cómo se llama la nueva operaria?';
-      }
-      case '8': {
-        session.step = FlowStep.NUEVO_ITEM_CATEGORIA;
-        session.opciones = [];
-        return '¿Es un material o un producto?\n1. Material\n2. Producto';
-      }
-      case '9':
+      case '7':
         return this.mostrarUltimosMovimientos(negocioId, telefono, session);
       default:
         return `No entendí esa opción.\n\n${MENSAJE_MENU}`;
@@ -331,35 +355,63 @@ export class ConversationService {
     categoria: Categoria | undefined,
     siguienteStep: FlowStep,
     pregunta: string,
+    permitirCrear = false,
   ): Promise<string> {
     const items = await this.itemsService.findAll(negocioId, true);
     const filtrados = categoria
       ? items.filter((item) => item.categoria === categoria)
       : items;
 
+    session.contextoItem = { categoria, siguienteStep };
+
     if (filtrados.length === 0) {
+      if (permitirCrear && categoria) {
+        return this.iniciarNuevoItemInline(session, categoria);
+      }
       session.step = FlowStep.MENU;
       session.opciones = [];
       return `No hay items cargados en esa categoría todavía.\n\n${MENSAJE_MENU}`;
     }
 
-    session.contextoItem = { categoria, siguienteStep };
+    const opcionNuevo: OpcionListado[] =
+      permitirCrear && categoria
+        ? [
+            {
+              id: SENTINEL_NUEVO_ITEM,
+              etiqueta: `➕ Cargar nuevo ${categoria === Categoria.PRODUCTO ? 'producto' : 'material'}`,
+            },
+          ]
+        : [];
 
     // Si nadie en este grupo de items usa "grupo", vamos directo a elegir
     // nombre — no le sumamos un paso de más a Corderoy/Gabardina/etc.
     const grupos = [...new Set(filtrados.map((i) => i.grupo).filter((g): g is string => !!g))].sort();
     if (grupos.length === 0) {
-      return this.pedirNombreItem(filtrados, session, pregunta);
+      return this.pedirNombreItem(filtrados, session, pregunta, opcionNuevo);
     }
 
     const hayItemsSinGrupo = filtrados.some((i) => !i.grupo);
     session.step = FlowStep.SELECCION_ITEM_GRUPO;
     session.opciones = [
+      ...opcionNuevo,
       ...grupos.map((g) => ({ id: g, etiqueta: g })),
       ...(hayItemsSinGrupo ? [{ id: null, etiqueta: 'Otros' }] : []),
     ];
 
     return `${pregunta}\n${construirListado(session.opciones)}`;
+  }
+
+  /// Arranca la creación de un item nuevo "sobre la marcha" dentro de un
+  /// flujo de compra/recepción — se salta el paso de categoría porque ya se
+  /// conoce por el contexto (material o producto según de dónde vino).
+  private iniciarNuevoItemInline(
+    session: WhatsappSession,
+    categoria: Categoria,
+  ): string {
+    session.nuevoItemCategoria = categoria;
+    session.step = FlowStep.NUEVO_ITEM_UNIDAD;
+    session.opciones = [];
+    return `¿Unidad de medida?\n${UNIDADES.map((u) => `${u.opcion}. ${u.etiqueta}`).join('\n')}`;
   }
 
   private async manejarSeleccionItemGrupo(
@@ -371,6 +423,10 @@ export class ConversationService {
     const seleccion = parseSeleccion(texto, session.opciones);
     if (!seleccion) {
       return `No entendí esa opción, respondé con el número de la lista.\n${construirListado(session.opciones)}`;
+    }
+
+    if (seleccion.id === SENTINEL_NUEVO_ITEM) {
+      return this.iniciarNuevoItemInline(session, session.contextoItem!.categoria!);
     }
 
     const contexto = session.contextoItem!;
@@ -387,16 +443,20 @@ export class ConversationService {
     itemsDisponibles: Item[],
     session: WhatsappSession,
     pregunta: string,
+    opcionesExtra: OpcionListado[] = [],
   ): string {
     const nombresUnicos = [
       ...new Set(itemsDisponibles.map((item) => item.nombre)),
     ].sort();
 
     session.step = FlowStep.SELECCION_ITEM_NOMBRE;
-    session.opciones = nombresUnicos.map((nombre) => ({
-      id: nombre,
-      etiqueta: nombre,
-    }));
+    session.opciones = [
+      ...opcionesExtra,
+      ...nombresUnicos.map((nombre) => ({
+        id: nombre,
+        etiqueta: nombre,
+      })),
+    ];
 
     return `${pregunta}\n${construirListado(session.opciones)}`;
   }
@@ -410,6 +470,10 @@ export class ConversationService {
     const seleccion = parseSeleccion(texto, session.opciones);
     if (!seleccion) {
       return `No entendí esa opción, respondé con el número de la lista.\n${construirListado(session.opciones)}`;
+    }
+
+    if (seleccion.id === SENTINEL_NUEVO_ITEM) {
+      return this.iniciarNuevoItemInline(session, session.contextoItem!.categoria!);
     }
 
     const contexto = session.contextoItem!;
@@ -458,15 +522,29 @@ export class ConversationService {
     session: WhatsappSession,
     siguienteStep: FlowStep,
     pregunta: string,
+    permitirCrear = false,
   ): Promise<string> {
+    const flujo =
+      siguienteStep === FlowStep.ENTREGA_OPERARIO ? 'ENTREGA' : 'RECEPCION';
     const operarios = await this.operariosService.findAll(negocioId, true);
-    const opciones: OpcionListado[] = operarios.map((op) => ({
-      id: op.id,
-      etiqueta: op.nombre,
-    }));
+
+    if (permitirCrear && operarios.length === 0) {
+      session.operarioParaFlujo = flujo;
+      session.step = FlowStep.NUEVA_OPERARIA_NOMBRE;
+      session.opciones = [];
+      return 'Todavía no cargaste ninguna operaria. ¿Cómo se llama?';
+    }
+
+    const opciones: OpcionListado[] = [
+      ...(permitirCrear
+        ? [{ id: SENTINEL_NUEVA_OPERARIA, etiqueta: '➕ Cargar operaria nueva' }]
+        : []),
+      ...operarios.map((op) => ({ id: op.id, etiqueta: op.nombre })),
+    ];
 
     session.step = siguienteStep;
     session.opciones = opciones;
+    session.operarioParaFlujo = permitirCrear ? flujo : undefined;
 
     return `${pregunta}\n${construirListado(opciones)}`;
   }
@@ -494,12 +572,28 @@ export class ConversationService {
       return 'Ingresá un número mayor a cero para la cantidad.';
     }
 
-    const item = await this.itemsService.findOne(negocioId, session.itemId!);
+    if (!session.itemId) {
+      const itemNuevo = armarItemNuevoPendiente(session, Categoria.MATERIAL);
+      const nombreCompleto = etiquetaItemNuevo(itemNuevo);
+      return this.pedirConfirmacion(
+        session,
+        {
+          tipoAccion: 'MOVIMIENTO',
+          itemNuevo,
+          movimiento: { tipo: MovimientoTipo.COMPRA, cantidad },
+          etiquetaItem: nombreCompleto,
+        },
+        `➕ Vas a agregar el material *${nombreCompleto}*.\nVas a registrar una *compra* de ${cantidad} ${itemNuevo.unidad.toLowerCase()}.`,
+      );
+    }
+
+    const item = await this.itemsService.findOne(negocioId, session.itemId);
     return this.pedirConfirmacion(
       session,
       {
         tipoAccion: 'MOVIMIENTO',
-        payload: { itemId: item.id, tipo: MovimientoTipo.COMPRA, cantidad },
+        itemId: item.id,
+        movimiento: { tipo: MovimientoTipo.COMPRA, cantidad },
         etiquetaItem: etiquetaItem(item),
       },
       `Vas a registrar una *compra* de ${cantidad} de ${etiquetaItem(item)}.`,
@@ -513,7 +607,15 @@ export class ConversationService {
     session: WhatsappSession,
   ): Promise<string> {
     const seleccion = parseSeleccion(texto, session.opciones);
-    if (!seleccion || !seleccion.id) {
+    if (!seleccion) {
+      return `No entendí esa opción, respondé con el número de la lista.\n${construirListado(session.opciones)}`;
+    }
+    if (seleccion.id === SENTINEL_NUEVA_OPERARIA) {
+      session.step = FlowStep.NUEVA_OPERARIA_NOMBRE;
+      session.opciones = [];
+      return '¿Cómo se llama la nueva operaria?';
+    }
+    if (!seleccion.id) {
       return `No entendí esa opción, respondé con el número de la lista.\n${construirListado(session.opciones)}`;
     }
     session.operarioId = seleccion.id;
@@ -523,6 +625,7 @@ export class ConversationService {
       Categoria.MATERIAL,
       FlowStep.ENTREGA_CANTIDAD,
       '¿Qué material le entregás?',
+      true,
     );
   }
 
@@ -537,22 +640,52 @@ export class ConversationService {
       return 'Ingresá un número mayor a cero para la cantidad.';
     }
 
-    const item = await this.itemsService.findOne(negocioId, session.itemId!);
-    const operario = await this.operariosService.findOne(
-      negocioId,
-      session.operarioId!,
+    let itemNuevo: ItemNuevoPayload | undefined;
+    let etiquetaItemTexto: string;
+    if (session.itemId) {
+      const item = await this.itemsService.findOne(negocioId, session.itemId);
+      etiquetaItemTexto = etiquetaItem(item);
+    } else {
+      itemNuevo = armarItemNuevoPendiente(session, Categoria.MATERIAL);
+      etiquetaItemTexto = etiquetaItemNuevo(itemNuevo);
+    }
+
+    let operarioId: string | undefined;
+    let operariaNuevaNombre: string | undefined;
+    let nombreOperaria: string;
+    if (session.operarioId) {
+      const operario = await this.operariosService.findOne(
+        negocioId,
+        session.operarioId,
+      );
+      operarioId = operario.id;
+      nombreOperaria = operario.nombre;
+    } else {
+      operariaNuevaNombre = session.nuevaOperariaNombrePendiente!;
+      nombreOperaria = operariaNuevaNombre;
+    }
+
+    const lineas: string[] = [];
+    if (itemNuevo) lineas.push(`➕ Vas a agregar el material *${etiquetaItemTexto}*.`);
+    if (operariaNuevaNombre) lineas.push(`➕ Vas a agregar a *${operariaNuevaNombre}* como operaria.`);
+    lineas.push(
+      `Vas a registrar una *entrega* de ${cantidad} de ${etiquetaItemTexto} para ${nombreOperaria}.`,
     );
 
     return this.pedirConfirmacion(
       session,
       {
         tipoAccion: 'MOVIMIENTO',
-        payload: { itemId: item.id, tipo: MovimientoTipo.CONSUMO, cantidad },
-        etiquetaItem: etiquetaItem(item),
-        crearOrdenParaOperario: operario.id,
-        mensajeExtra: `\nCuando ${operario.nombre} te traiga el producto terminado, elegí la opción 3 del menú y vas a poder vincularlo a esta misma entrega.`,
+        itemId: session.itemId,
+        itemNuevo,
+        operarioId,
+        operariaNuevaNombre,
+        crearOrdenParaOperario: true,
+        movimiento: { tipo: MovimientoTipo.CONSUMO, cantidad },
+        etiquetaItem: etiquetaItemTexto,
+        mensajeExtra: `\nCuando ${nombreOperaria} te traiga el producto terminado, elegí la opción 3 del menú y vas a poder vincularlo a esta misma entrega.`,
       },
-      `Vas a registrar una *entrega* de ${cantidad} de ${etiquetaItem(item)} para ${operario.nombre}.`,
+      lineas.join('\n'),
     );
   }
 
@@ -563,7 +696,15 @@ export class ConversationService {
     session: WhatsappSession,
   ): Promise<string> {
     const seleccion = parseSeleccion(texto, session.opciones);
-    if (!seleccion || !seleccion.id) {
+    if (!seleccion) {
+      return `No entendí esa opción, respondé con el número de la lista.\n${construirListado(session.opciones)}`;
+    }
+    if (seleccion.id === SENTINEL_NUEVA_OPERARIA) {
+      session.step = FlowStep.NUEVA_OPERARIA_NOMBRE;
+      session.opciones = [];
+      return '¿Cómo se llama la nueva operaria?';
+    }
+    if (!seleccion.id) {
       return `No entendí esa opción, respondé con el número de la lista.\n${construirListado(session.opciones)}`;
     }
     session.operarioId = seleccion.id;
@@ -579,6 +720,7 @@ export class ConversationService {
         Categoria.PRODUCTO,
         FlowStep.RECEPCION_CANTIDAD,
         '¿Qué producto terminado trae?',
+        true,
       );
     }
 
@@ -647,6 +789,7 @@ export class ConversationService {
       Categoria.PRODUCTO,
       FlowStep.RECEPCION_CANTIDAD,
       '¿Qué producto terminado trae?',
+      true,
     );
   }
 
@@ -661,26 +804,54 @@ export class ConversationService {
       return 'Ingresá un número mayor a cero para la cantidad.';
     }
 
-    const item = await this.itemsService.findOne(negocioId, session.itemId!);
-    const operario = await this.operariosService.findOne(
-      negocioId,
-      session.operarioId!,
+    let itemNuevo: ItemNuevoPayload | undefined;
+    let etiquetaItemTexto: string;
+    if (session.itemId) {
+      const item = await this.itemsService.findOne(negocioId, session.itemId);
+      etiquetaItemTexto = etiquetaItem(item);
+    } else {
+      itemNuevo = armarItemNuevoPendiente(session, Categoria.PRODUCTO);
+      etiquetaItemTexto = etiquetaItemNuevo(itemNuevo);
+    }
+
+    let operarioId: string | undefined;
+    let operariaNuevaNombre: string | undefined;
+    let nombreOperaria: string;
+    if (session.operarioId) {
+      const operario = await this.operariosService.findOne(
+        negocioId,
+        session.operarioId,
+      );
+      operarioId = operario.id;
+      nombreOperaria = operario.nombre;
+    } else {
+      operariaNuevaNombre = session.nuevaOperariaNombrePendiente!;
+      nombreOperaria = operariaNuevaNombre;
+    }
+
+    const lineas: string[] = [];
+    if (itemNuevo) lineas.push(`➕ Vas a agregar el producto *${etiquetaItemTexto}*.`);
+    if (operariaNuevaNombre) lineas.push(`➕ Vas a agregar a *${operariaNuevaNombre}* como operaria.`);
+    lineas.push(
+      `Vas a registrar una *recepción* de ${cantidad} de ${etiquetaItemTexto} de ${nombreOperaria}.`,
     );
 
     return this.pedirConfirmacion(
       session,
       {
         tipoAccion: 'MOVIMIENTO',
-        payload: {
-          itemId: item.id,
+        itemId: session.itemId,
+        itemNuevo,
+        operarioId,
+        operariaNuevaNombre,
+        movimiento: {
           tipo: MovimientoTipo.PRODUCCION,
           cantidad,
-          operarioId: operario.id,
           ordenProduccionId: session.ordenProduccionId ?? undefined,
         },
-        etiquetaItem: etiquetaItem(item),
+        etiquetaItem: etiquetaItemTexto,
       },
-      `Vas a registrar una *recepción* de ${cantidad} de ${etiquetaItem(item)} de ${operario.nombre}.`,
+      lineas.join('\n'),
     );
   }
 
@@ -700,7 +871,8 @@ export class ConversationService {
       session,
       {
         tipoAccion: 'MOVIMIENTO',
-        payload: { itemId: item.id, tipo: MovimientoTipo.VENTA, cantidad },
+        itemId: item.id,
+        movimiento: { tipo: MovimientoTipo.VENTA, cantidad },
         etiquetaItem: etiquetaItem(item),
       },
       `Vas a registrar una *venta* de ${cantidad} de ${etiquetaItem(item)}.`,
@@ -723,7 +895,8 @@ export class ConversationService {
       session,
       {
         tipoAccion: 'MOVIMIENTO',
-        payload: { itemId: item.id, tipo: MovimientoTipo.AJUSTE, cantidad },
+        itemId: item.id,
+        movimiento: { tipo: MovimientoTipo.AJUSTE, cantidad },
         etiquetaItem: etiquetaItem(item),
       },
       `Vas a registrar un *ajuste* de ${cantidad > 0 ? '+' : ''}${cantidad} en ${etiquetaItem(item)}.`,
@@ -799,41 +972,42 @@ export class ConversationService {
     return `🕓 *Últimos movimientos*\n${lineas}\n\n${MENSAJE_MENU}`;
   }
 
-  private prepararNuevaOperaria(
+  /// Se llega acá siempre desde el sentinel "cargar operaria nueva" elegido
+  /// dentro de entrega o recepción (las opciones standalone del menú
+  /// principal para agregar operaria/item se sacaron: ahora se cargan sobre
+  /// la marcha, pegadas al movimiento que las originó). No confirma ni crea
+  /// nada todavía — sigue el flujo original hasta la cantidad, y recién ahí
+  /// se junta todo en una sola confirmación.
+  private async manejarNuevaOperariaNombre(
+    negocioId: string,
     telefono: string,
     texto: string,
     session: WhatsappSession,
-  ): string {
+  ): Promise<string> {
     const nombre = texto.trim();
     if (!nombre) {
       return 'Ingresá un nombre válido.';
     }
-    return this.pedirConfirmacion(
-      session,
-      { tipoAccion: 'OPERARIA', nombre },
-      `Vas a agregar a *${nombre}* como operaria.`,
-    );
-  }
+    session.nuevaOperariaNombrePendiente = nombre;
 
-  private manejarNuevoItemCategoria(
-    telefono: string,
-    texto: string,
-    session: WhatsappSession,
-  ): string {
-    const categoria =
-      texto.trim() === '1'
-        ? Categoria.MATERIAL
-        : texto.trim() === '2'
-          ? Categoria.PRODUCTO
-          : null;
-    if (!categoria) {
-      return 'Respondé 1 (material) o 2 (producto).';
+    if (session.operarioParaFlujo === 'RECEPCION') {
+      return this.pedirItem(
+        negocioId,
+        session,
+        Categoria.PRODUCTO,
+        FlowStep.RECEPCION_CANTIDAD,
+        '¿Qué producto terminado trae?',
+        true,
+      );
     }
-
-    session.nuevoItemCategoria = categoria;
-    session.step = FlowStep.NUEVO_ITEM_UNIDAD;
-
-    return `¿Unidad de medida?\n${UNIDADES.map((u) => `${u.opcion}. ${u.etiqueta}`).join('\n')}`;
+    return this.pedirItem(
+      negocioId,
+      session,
+      Categoria.MATERIAL,
+      FlowStep.ENTREGA_CANTIDAD,
+      '¿Qué material le entregás?',
+      true,
+    );
   }
 
   private manejarNuevoItemUnidad(
@@ -895,7 +1069,7 @@ export class ConversationService {
     }
 
     if (respuesta === 'no') {
-      return this.pedirConfirmacionNuevoItem(session, null);
+      return this.finalizarDatosNuevoItem(session, null);
     }
 
     session.step = FlowStep.NUEVO_ITEM_COLOR;
@@ -911,29 +1085,24 @@ export class ConversationService {
     if (!color) {
       return 'Ingresá un color válido.';
     }
-    return this.pedirConfirmacionNuevoItem(session, color);
+    return this.finalizarDatosNuevoItem(session, color);
   }
 
-  private pedirConfirmacionNuevoItem(
+  /// Última pregunta antes de la cantidad: ya se tienen todos los datos del
+  /// item nuevo (unidad, nombre, grupo, color), pero todavía no se creó — se
+  /// crea junto con el movimiento al confirmar (ver ejecutarMovimientoPendiente).
+  private finalizarDatosNuevoItem(
     session: WhatsappSession,
     colorNombre: string | null,
   ): string {
+    session.nuevoItemColorNombre = colorNombre;
+    session.itemId = undefined;
+    session.step = session.contextoItem!.siguienteStep;
+
     const nombreCompleto = colorNombre
       ? `${session.nuevoItemNombre} ${colorNombre}`
       : session.nuevoItemNombre;
-    const grupo = session.nuevoItemGrupo ?? null;
-    return this.pedirConfirmacion(
-      session,
-      {
-        tipoAccion: 'ITEM',
-        grupo,
-        nombre: session.nuevoItemNombre!,
-        categoria: session.nuevoItemCategoria!,
-        unidad: session.nuevoItemUnidad!,
-        colorNombre,
-      },
-      `Vas a agregar el item *${nombreCompleto}* (${session.nuevoItemCategoria}, ${session.nuevoItemUnidad})${grupo ? ` en el grupo *${grupo}*` : ''}.`,
-    );
+    return `Nuevo: *${nombreCompleto}*.\n¿Cuánta cantidad? (podés escribir con decimales, ej: 5.5)`;
   }
 
   private async manejarConfirmacion(
@@ -957,45 +1126,64 @@ export class ConversationService {
       return MENSAJE_MENU;
     }
 
-    switch (accion.tipoAccion) {
-      case 'MOVIMIENTO':
-        return this.ejecutarMovimientoPendiente(negocioId, accion);
-      case 'OPERARIA': {
-        const operaria = await this.operariosService.create(negocioId, {
-          nombre: accion.nombre,
-        });
-        return `✅ Operaria agregada: ${operaria.nombre}.\n\n${MENSAJE_MENU}`;
-      }
-      case 'ITEM': {
-        const item = await this.itemsService.create(negocioId, {
-          grupo: accion.grupo ?? undefined,
-          nombre: accion.nombre,
-          categoria: accion.categoria,
-          unidad: accion.unidad,
-          tieneColor: accion.colorNombre !== null,
-          colorNombre: accion.colorNombre ?? undefined,
-        });
-        return `✅ Item agregado: ${etiquetaItem(item)}.\n\n${MENSAJE_MENU}`;
-      }
-    }
+    return this.ejecutarMovimientoPendiente(negocioId, accion);
   }
 
+  /// Resuelve (creando si hace falta) el item y la operaria de la acción, y
+  /// recién ahí registra el movimiento — así una sola confirmación puede
+  /// cubrir "crear material nuevo + registrar la compra" o "crear operaria
+  /// nueva + registrar la entrega" sin pasos de más.
   private async ejecutarMovimientoPendiente(
     negocioId: string,
     accion: AccionMovimientoPendiente,
   ): Promise<string> {
-    let payload = accion.payload;
-    if (accion.crearOrdenParaOperario) {
-      const orden = await this.ordenesProduccionService.create(negocioId, {
-        operarioId: accion.crearOrdenParaOperario,
-        observaciones: 'Entrega registrada por WhatsApp',
+    const mensajesCreacion: string[] = [];
+
+    let itemId = accion.itemId;
+    if (accion.itemNuevo) {
+      const item = await this.itemsService.create(negocioId, {
+        grupo: accion.itemNuevo.grupo ?? undefined,
+        nombre: accion.itemNuevo.nombre,
+        categoria: accion.itemNuevo.categoria,
+        unidad: accion.itemNuevo.unidad,
+        tieneColor: accion.itemNuevo.colorNombre !== null,
+        colorNombre: accion.itemNuevo.colorNombre ?? undefined,
       });
-      payload = { ...payload, ordenProduccionId: orden.id };
+      itemId = item.id;
+      const tipo = accion.itemNuevo.categoria === Categoria.PRODUCTO ? 'Producto' : 'Material';
+      mensajesCreacion.push(`✅ ${tipo} agregado: ${etiquetaItem(item)}.`);
     }
 
-    await this.movimientosService.create(negocioId, payload);
-    const stock = await this.stockService.getStock(negocioId, payload.itemId);
+    let operarioId = accion.operarioId;
+    if (accion.operariaNuevaNombre) {
+      const operaria = await this.operariosService.create(negocioId, {
+        nombre: accion.operariaNuevaNombre,
+      });
+      operarioId = operaria.id;
+      mensajesCreacion.push(`✅ Operaria agregada: ${operaria.nombre}.`);
+    }
 
-    return `✅ Registrado: ${accion.payload.cantidad} de ${accion.etiquetaItem}.\nStock actual: ${stock}${accion.mensajeExtra ?? ''}\n\n${MENSAJE_MENU}`;
+    let ordenProduccionId = accion.movimiento.ordenProduccionId;
+    if (accion.crearOrdenParaOperario) {
+      const orden = await this.ordenesProduccionService.create(negocioId, {
+        operarioId: operarioId!,
+        observaciones: 'Entrega registrada por WhatsApp',
+      });
+      ordenProduccionId = orden.id;
+    }
+
+    const payload: MovimientoPayload = {
+      itemId: itemId!,
+      tipo: accion.movimiento.tipo,
+      cantidad: accion.movimiento.cantidad,
+      operarioId,
+      ordenProduccionId,
+    };
+
+    await this.movimientosService.create(negocioId, payload);
+    const stock = await this.stockService.getStock(negocioId, itemId!);
+
+    const encabezado = mensajesCreacion.length ? `${mensajesCreacion.join('\n')}\n` : '';
+    return `${encabezado}✅ Registrado: ${accion.movimiento.cantidad} de ${accion.etiquetaItem}.\nStock actual: ${stock}${accion.mensajeExtra ?? ''}\n\n${MENSAJE_MENU}`;
   }
 }

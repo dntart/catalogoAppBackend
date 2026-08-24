@@ -15,7 +15,6 @@ export enum FlowStep {
   AJUSTE_CANTIDAD = 'AJUSTE_CANTIDAD',
   STOCK_CATEGORIA = 'STOCK_CATEGORIA',
   NUEVA_OPERARIA_NOMBRE = 'NUEVA_OPERARIA_NOMBRE',
-  NUEVO_ITEM_CATEGORIA = 'NUEVO_ITEM_CATEGORIA',
   NUEVO_ITEM_UNIDAD = 'NUEVO_ITEM_UNIDAD',
   NUEVO_ITEM_NOMBRE = 'NUEVO_ITEM_NOMBRE',
   NUEVO_ITEM_GRUPO = 'NUEVO_ITEM_GRUPO',
@@ -45,21 +44,10 @@ export interface MovimientoPayload {
   ordenProduccionId?: string;
 }
 
-export interface AccionMovimientoPendiente {
-  tipoAccion: 'MOVIMIENTO';
-  payload: MovimientoPayload;
-  etiquetaItem: string;
-  crearOrdenParaOperario?: string;
-  mensajeExtra?: string;
-}
-
-export interface AccionOperariaPendiente {
-  tipoAccion: 'OPERARIA';
-  nombre: string;
-}
-
-export interface AccionItemPendiente {
-  tipoAccion: 'ITEM';
+/// Datos de un item que todavía no existe y hay que crear antes de poder
+/// registrar el movimiento (compra de un material nuevo, recepción de un
+/// producto nuevo).
+export interface ItemNuevoPayload {
   grupo: string | null;
   nombre: string;
   categoria: Categoria;
@@ -67,8 +55,28 @@ export interface AccionItemPendiente {
   colorNombre: string | null;
 }
 
-export type AccionPendiente =
-  AccionMovimientoPendiente | AccionOperariaPendiente | AccionItemPendiente;
+/// Un solo tipo de acción pendiente para todo movimiento — puede llevar
+/// pegada la creación del item y/o de la operaria si todavía no existían,
+/// para poder confirmar todo junto con un solo sí/no.
+export interface AccionMovimientoPendiente {
+  tipoAccion: 'MOVIMIENTO';
+  itemId?: string;
+  itemNuevo?: ItemNuevoPayload;
+  operarioId?: string;
+  operariaNuevaNombre?: string;
+  /// true en "entrega a operaria": siempre genera una orden de producción
+  /// nueva vinculada al operarioId ya resuelto (existente o recién creado).
+  crearOrdenParaOperario?: boolean;
+  movimiento: {
+    tipo: MovimientoTipo;
+    cantidad: number;
+    ordenProduccionId?: string;
+  };
+  etiquetaItem: string;
+  mensajeExtra?: string;
+}
+
+export type AccionPendiente = AccionMovimientoPendiente;
 
 export interface WhatsappSession {
   step: FlowStep;
@@ -81,6 +89,11 @@ export interface WhatsappSession {
   nuevoItemUnidad?: Unidad;
   nuevoItemNombre?: string;
   nuevoItemGrupo?: string | null;
+  nuevoItemColorNombre?: string | null;
+  /// A qué flujo volver después de pedir el nombre de una operaria nueva
+  /// (elegida con el sentinel "cargar operaria nueva" desde pedirOperario).
+  operarioParaFlujo?: 'ENTREGA' | 'RECEPCION';
+  nuevaOperariaNombrePendiente?: string;
   accionPendiente?: AccionPendiente;
 }
 
