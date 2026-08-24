@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateRequest } from 'twilio';
 import {
   conversationService,
+  sessionStoreService,
   usersService,
   whatsappService,
 } from '../../../../lib/container';
+import { FlowStep } from '../../../../lib/modules/whatsapp/conversation/types';
 
 /**
  * Rechaza cualquier request que no venga firmado por Twilio — sin esto,
@@ -45,7 +47,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const respuesta = await conversationService.manejarMensaje(owner.negocioId, from, texto);
 
   try {
-    await whatsappService.enviarMensaje(from, respuesta);
+    // manejarMensaje ya persistió la sesión antes de devolver la respuesta
+    // (guardado único al final de la conversación) — releerla acá es barato
+    // y nos dice, sin tocar la lógica conversacional, si lo que hay que
+    // mandar es una confirmación (para ofrecerla con botones Sí/No en vez
+    // de pedir que se escriba a mano).
+    const sesion = await sessionStoreService.obtener(from);
+    if (sesion.step === FlowStep.CONFIRMAR) {
+      await whatsappService.enviarConfirmacion(from, respuesta);
+    } else {
+      await whatsappService.enviarMensaje(from, respuesta);
+    }
   } catch (error) {
     console.error('No se pudo enviar la respuesta por WhatsApp', error);
   }
