@@ -16,7 +16,7 @@ export function Layout() {
     <div className="min-h-screen bg-stone-50">
       <header className="border-b border-stone-200 bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="font-semibold text-stone-800">StockAsist</span>
+          <span className="font-semibold text-stone-800">Textil Stock</span>
           <nav className="flex gap-4 text-sm">
             {links.map((link) => (
               <NavLink

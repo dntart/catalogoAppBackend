@@ -28,7 +28,7 @@ import { OrdenesProduccionService } from '../../ordenes-produccion/ordenes-produ
 import { StockService } from '../../stock/stock.service';
 
 const MENSAJE_MENU = [
-  '👋 *StockAsist*',
+  '👋 *Textil Stock*',
   '¿Qué querés registrar? Respondé con el número:',
   '',
   '1️⃣ Compra de material',

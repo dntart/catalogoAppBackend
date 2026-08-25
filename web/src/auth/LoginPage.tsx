@@ -35,7 +35,7 @@ export function LoginPage() {
         onSubmit={handleSubmit}
         className="w-full max-w-sm space-y-4 rounded-lg bg-white p-8 shadow"
       >
-        <h1 className="text-xl font-semibold text-stone-800">StockAsist</h1>
+        <h1 className="text-xl font-semibold text-stone-800">Textil Stock</h1>
         <div>
           <label className="mb-1 block text-sm text-stone-600">Email</label>
           <input

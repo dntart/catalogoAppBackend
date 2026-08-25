@@ -1,4 +1,4 @@
-# Guía de uso — StockAsist
+# Guía de uso — Textil Stock
 
 Guía para el dueño/operador del negocio: cómo crear tu cuenta, registrar movimientos por WhatsApp y consultar todo lo cargado desde el panel web.
 

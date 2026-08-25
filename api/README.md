@@ -1,6 +1,6 @@
-# StockAsist API
+# Textil Stock API
 
-Backend de StockAsist como funciones serverless de Next.js (App Router, solo `app/api/**/route.ts`, sin páginas), desplegado en Vercel. Reemplaza al backend original en NestJS/Railway — mismo comportamiento, misma base de datos (Supabase, schema `stockasist`), distinta forma de correr.
+Backend de Textil Stock (antes "StockAsist") como funciones serverless de Next.js (App Router, solo `app/api/**/route.ts`, sin páginas), desplegado en Vercel. Reemplaza al backend original en NestJS/Railway — mismo comportamiento, misma base de datos (Supabase, schema `stockasist` — el nombre del schema no se renombró para no tocar la conexión en producción, es solo un identificador interno).
 
 ## Por qué este cambio
 

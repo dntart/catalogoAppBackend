@@ -165,7 +165,7 @@ describe('ConversationService', () => {
       'hola',
     );
 
-    expect(respuesta).toContain('StockAsist');
+    expect(respuesta).toContain('Textil Stock');
     expect(respuesta).toContain('1️⃣ Compra de material');
   });
 
@@ -301,7 +301,7 @@ describe('ConversationService', () => {
 
     expect(movimientosService.create).not.toHaveBeenCalled();
     expect(respuesta).toContain('Cancelado');
-    expect(respuesta).toContain('StockAsist');
+    expect(respuesta).toContain('Textil Stock');
   });
 
   it('flujo entrega -> recepcion: vincula CONSUMO y PRODUCCION a la misma orden', async () => {
@@ -394,7 +394,7 @@ describe('ConversationService', () => {
 
     expect(respuesta).toContain('⚠️');
     expect(respuesta).toContain('Stock insuficiente');
-    expect(respuesta).toContain('StockAsist');
+    expect(respuesta).toContain('Textil Stock');
   });
 
   it('rechaza una seleccion fuera de rango sin romper la sesion', async () => {
@@ -402,7 +402,7 @@ describe('ConversationService', () => {
     const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '99');
 
     expect(respuesta).toContain('No entendí');
-    expect(respuesta).toContain('StockAsist');
+    expect(respuesta).toContain('Textil Stock');
   });
 
   it('"menu" y "0" reinician la conversacion desde cualquier paso', async () => {
@@ -414,7 +414,7 @@ describe('ConversationService', () => {
       TELEFONO,
       'menu',
     );
-    expect(respuestaMenu).toContain('StockAsist');
+    expect(respuestaMenu).toContain('Textil Stock');
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1');
     const respuestaCero = await service.manejarMensaje(
@@ -422,7 +422,7 @@ describe('ConversationService', () => {
       TELEFONO,
       '0',
     );
-    expect(respuestaCero).toContain('StockAsist');
+    expect(respuestaCero).toContain('Textil Stock');
   });
 
   it('compra de material: catálogo vacío ofrece cargar el material directo, sin listas', async () => {

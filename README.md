@@ -1,4 +1,4 @@
-# StockAsist
+# Textil Stock
 
 Sistema de gestión de producción e inventario multi-tenant (SaaS) para emprendimientos textiles. Lleva el catálogo de productos y materiales, registra quién hizo qué movimiento (compra, consumo, producción, venta, ajuste) y calcula el stock siempre a partir de ese historial — nunca se edita un número de stock a mano. Cada negocio (`Negocio`) tiene sus propios datos, completamente aislados de los demás, y puede operar tanto desde la API/Swagger como desde un bot de WhatsApp.
 
