@@ -274,29 +274,26 @@ Pensado para que el dueño registre todo (compra de tela, entrega a una operaria
 
 ## Panel web
 
-`web/` es un frontend aparte (React + Vite + Tailwind, `web/README.md` tiene el detalle propio). No es solo de consulta — tiene formularios de carga en cada sección, así que también sirve como respaldo completo si el bot de WhatsApp no está disponible (ver [Guía de uso](#guía-de-uso-para-el-dueño-del-negocio)).
+Vive dentro de `api/` (`app/(dashboard)/**`, más `ui/` para el código de cliente) — **no es un proyecto aparte**, es el mismo deploy de Next.js que el backend. No es solo de consulta: tiene formularios de carga en cada sección, así que también sirve como respaldo completo si el bot de WhatsApp no está disponible (ver [Guía de uso](#guía-de-uso-para-el-dueño-del-negocio)).
 
-- Login contra `POST /auth/login`, mismo JWT que usa el resto de la API — el token se guarda en el browser y viaja en cada request (`web/src/lib/api.ts`).
-- Secciones (`web/src/pages/`), en el orden del nav:
-  - **Resumen** — landing page (`/`). Gráfico de barras de stock por Materiales y Productos (`ResumenPage.tsx`), ordenado de menor a mayor cantidad, con alerta visual (ícono + etiqueta, nunca solo color) para "Sin stock" (stock en 0) y "Bajo mínimo" (`bajoMinimo` del resumen de `GET /stock`). Es la vista que más valor da de un vistazo, por eso quedó como entrada en vez de Items.
-  - **Items** — catálogo con su stock (`GET /stock` en bloque, no item por item — ver nota de rendimiento más abajo), fecha de alta, y formulario para dar de alta uno nuevo.
+- Login contra `POST /api/auth/login`, mismo JWT que usa el resto de la API — el token se guarda en el browser y viaja en cada request (`api/ui/api-client.ts`).
+- Secciones (`api/app/(dashboard)/**`), en el orden del nav:
+  - **Resumen** — landing page (`/`). Gráfico de barras de stock por Materiales y Productos, ordenado de menor a mayor cantidad, con alerta visual (ícono + etiqueta, nunca solo color) para "Sin stock" (stock en 0) y "Bajo mínimo" (`bajoMinimo` del resumen de `GET /api/stock`). Es la vista que más valor da de un vistazo, por eso quedó como entrada en vez de Items.
+  - **Items** — catálogo con su stock, fecha de alta, y formulario para dar de alta uno nuevo.
   - **Operarios** — listado + alta.
   - **Órdenes de producción** — listado + alta.
   - **Movimientos** — historial del ledger + formulario para cargar un movimiento nuevo (equivalente a las opciones 1–5 del bot). A diferencia del bot, **no pide confirmación** antes de guardar.
-- **Rendimiento**: `ItemsPage` trae el stock de todos los items con una sola llamada a `GET /stock` (`Promise.all` junto con `GET /items`) en vez de pedirlo item por item — la versión anterior tenía un botón "ver" por fila que disparaba un request por click, un N+1 evitable ya que el endpoint de resumen siempre devolvió todo junto.
-- Se conecta al backend vía `VITE_API_URL` (env var de build, no de runtime — hay que rebuildear/redeployar el frontend si cambia la URL del backend).
-- El backend tiene que aceptar el origen del frontend en `CORS_ORIGIN` (ver [Variables de entorno](#variables-de-entorno)) — acepta una lista separada por comas, así conviven el dominio de producción y `http://localhost:5173` de desarrollo.
+- Se conecta al backend con rutas relativas (`/api/...`) — mismo origen, mismo deploy, no hace falta CORS ni una env var de build apuntando a otro dominio.
 
 ## Deploy en producción
 
-El sistema corre 24/7 en la nube, todo dentro de dos proveedores (Vercel + Supabase) para poder compartir infraestructura con otros SaaS del mismo dueño — ver [`api/README.md`](api/README.md) para el detalle completo del backend:
+El sistema corre 24/7 en la nube, todo dentro de dos proveedores (Vercel + Supabase) para poder compartir infraestructura con otros SaaS del mismo dueño — ver [`api/README.md`](api/README.md) para el detalle completo:
 
-- **Backend**: [Vercel](https://vercel.com/) — proyecto aparte (`api/`, Next.js API routes, sin páginas), en la **misma cuenta de Vercel** que el frontend. `https://stockasist-api.vercel.app`.
-- **Frontend**: [Vercel](https://vercel.com/) — proyecto `web/` (Vite + React), deploy atado a `VITE_API_URL` (variable de build) apuntando al backend de arriba.
+- **Frontend + backend**: [Vercel](https://vercel.com/) — **un solo proyecto** (`api/`, Next.js: páginas del dashboard + API routes en el mismo deploy). `https://stockasist-api.vercel.app`.
 - **Base de datos**: [Supabase](https://supabase.com/) — un solo proyecto Postgres compartido, `stockasist` vive en su propio **schema** (no una base separada) para poder convivir con otros SaaS en el mismo proyecto de Supabase sin chocar.
-- **Bot de WhatsApp**: mismo backend de Vercel, expuesto vía Twilio (webhook apuntando a `<url-del-backend>/api/whatsapp/webhook`).
+- **Bot de WhatsApp**: mismo proyecto de Vercel, expuesto vía Twilio (webhook apuntando a `<url>/api/whatsapp/webhook`).
 
-> **Nota histórica**: el backend corrió en NestJS sobre Railway hasta que se migró a Next.js API routes sobre Vercel — decisión tomada para alinear el proyecto a una arquitectura que se pueda compartir entre varios SaaS del mismo dueño (ver skill `saas-shared-infra`). El código NestJS/Railway sigue en la raíz del repo por ahora [ver [Cómo se construyó](#cómo-se-construyó-desde-cero-guía-de-replicación) para ese historial], pero no es lo que corre en producción.
+> **Nota histórica**: el backend corrió en NestJS sobre Railway, después se migró a Next.js API routes sobre Vercel como proyecto aparte del frontend (Vite + React), y finalmente ambos se unificaron en un solo proyecto de Vercel — cada paso alineando más al sistema con la arquitectura compartida para varios SaaS del mismo dueño (ver skill `saas-shared-infra`). El código NestJS/Railway y el frontend Vite viejo (`web/`) siguen en el historial de git, pero no es lo que corre en producción.
 
 Correr el seed o cualquier script puntual contra la base de producción se hace directo con `DATABASE_URL` (Supabase es alcanzable por internet, a diferencia de Railway antes) — no hace falta `ssh` ni túneles.
 
