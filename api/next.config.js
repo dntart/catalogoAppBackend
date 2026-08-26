@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // API-only: no paginas, solo route handlers bajo app/api/**
+  // Proyecto unico: paginas del dashboard (app/**) + route handlers del
+  // backend (app/api/**), todo en el mismo deploy de Vercel.
   eslint: { ignoreDuringBuilds: true },
 };
 
