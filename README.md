@@ -305,45 +305,13 @@ No incluye credenciales de acceso a propósito — cada negocio tiene su propio 
 
 ## Puesta en marcha (proyecto ya clonado)
 
-Prerrequisitos: Node.js 20+, Docker Desktop con el motor corriendo (ver [Troubleshooting](#troubleshooting) si `docker info` falla).
+El proyecto que corre de verdad es `api/` (Next.js + Supabase, ver [Deploy en producción](#deploy-en-producción)). Puesta en marcha, variables de entorno y scripts están documentados ahí: [`api/README.md`](api/README.md) → secciones "Variables de entorno" y "Desarrollo local". No hace falta Docker ni Postgres local — `DATABASE_URL` apunta directo a Supabase.
 
-```bash
-npm install
-
-# copiar y completar: contraseña del dueño, JWT_SECRET, etc.
-cp .env.example .env
-
-# levantar Postgres en Docker
-docker compose up -d
-
-# aplicar el schema
-npx prisma migrate dev
-
-# crea el primer Negocio + su User dueño (esSuperAdmin: true, ver OWNER_* en .env)
-# + carga el catálogo real del negocio
-npm run db:seed
-
-# levantar la API en modo watch
-npm run start:dev
-```
-
-La API queda en `http://localhost:3000`. Documentación interactiva (Swagger UI) en `http://localhost:3000/docs`, y el spec OpenAPI crudo en `http://localhost:3000/docs-json`.
+> **Nota histórica**: esta sección describía la puesta en marcha del backend NestJS original (Docker + Postgres local + `npm run start:dev`, con Swagger en `/docs`). Ese código sigue en `src/` y el `package.json` de la raíz por ahora, pero no es lo que corre en producción — ver la nota histórica en [Deploy en producción](#deploy-en-producción).
 
 ## Variables de entorno
 
-| variable | ejemplo | uso |
-|---|---|---|
-| `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/fauna_de_tela?schema=public` | leída por Prisma y por `docker-compose.yml` (usuario/clave/DB deben coincidir con los `environment:` del servicio `postgres`) |
-| `PORT` | `3000` | opcional, puerto HTTP (`src/main.ts`) |
-| `JWT_SECRET` | string aleatorio largo | firma los tokens (`src/auth`). Generar uno propio, nunca reusar el de ejemplo |
-| `JWT_EXPIRES_IN` | `7d` | opcional, vencimiento del token |
-| `OWNER_NEGOCIO_NOMBRE` / `OWNER_EMAIL` / `OWNER_PASSWORD` / `OWNER_NOMBRE` | — | solo usados por `prisma/seed.ts` para crear el primer `Negocio` y su `User` (con `esSuperAdmin: true`); no se leen en runtime |
-| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | — | credenciales de la [consola de Twilio](https://console.twilio.com/) |
-| `TWILIO_WHATSAPP_FROM` | `whatsapp:+14155238886` | número de origen; el del sandbox por default |
-| `OWNER_WHATSAPP_NUMBER` | `whatsapp:+549...` | opcional; si se informa, `prisma/seed.ts` lo guarda como `User.whatsappNumber` del primer negocio. El bot resuelve el negocio de cada mensaje contra esta columna en runtime, no contra la variable de entorno (ver [Bot de WhatsApp](#bot-de-whatsapp)) |
-| `PUBLIC_APP_URL` | `https://backend-production-xxxx.up.railway.app` | URL pública del backend, **sin barra final** — Twilio la necesita para validar la firma del webhook (ver [Seguridad](#seguridad)). En local, la URL de ngrok si estás probando con Twilio real |
-
-`.env` está en `.gitignore`; `.env.example` es la plantilla versionada.
+Ver [`api/README.md`](api/README.md#variables-de-entorno) — `DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, `TWILIO_CONTENT_SID_SI_NO`, `PUBLIC_APP_URL`. La plantilla versionada es [`api/.env.example`](api/.env.example) (`.env` real está en `.gitignore`).
 
 ## Scripts disponibles
 
