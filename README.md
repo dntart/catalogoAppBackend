@@ -1,10 +1,12 @@
 # Textil Stock
 
-Sistema de gestión de producción e inventario multi-tenant (SaaS) para emprendimientos textiles. Lleva el catálogo de productos y materiales, registra quién hizo qué movimiento (compra, consumo, producción, venta, ajuste) y calcula el stock siempre a partir de ese historial — nunca se edita un número de stock a mano. Cada negocio (`Negocio`) tiene sus propios datos, completamente aislados de los demás, y puede operar tanto desde la API/Swagger como desde un bot de WhatsApp.
+Sistema de gestión de producción e inventario multi-tenant (SaaS) para emprendimientos textiles. Lleva el catálogo de productos y materiales, registra quién hizo qué movimiento (compra, consumo, producción, venta, ajuste) y calcula el stock siempre a partir de ese historial — nunca se edita un número de stock a mano. Cada negocio (`Negocio`) tiene sus propios datos, completamente aislados de los demás, y puede operar tanto desde el panel web como desde un bot de WhatsApp.
 
-> "Fauna de Tela" es el primer cliente real del sistema (una fábrica de muñecos de tela), no el nombre del producto — vas a ver ese nombre como dato de ejemplo en el seed y en algunos ejemplos, no como marca.
+> "Fauna de Tela" es el primer cliente real del sistema (una fábrica de muñecos de tela), no el nombre del producto — vas a ver ese nombre como dato de ejemplo en algunos ejemplos, no como marca.
 
-Este documento cubre dos cosas: cómo funciona el sistema tal como está hoy, y cómo replicar el proceso completo de armado desde cero (útil si querés adaptar esta misma base a otro rubro/negocio).
+> ⚠️ **Qué corre de verdad en producción**: el runtime actual es **Next.js (API routes + panel web) en Vercel + Supabase**, todo dentro de `api/` — ver [Deploy en producción](#deploy-en-producción) y [`api/README.md`](api/README.md). Las secciones **Stack**, **Arquitectura** y buena parte de las que siguen describen el **diseño original en NestJS** (con el que arrancó el proyecto y que documentan las secciones [Cómo se construyó](#cómo-se-construyó-desde-cero-guía-de-replicación) como guía de replicación) — siguen siendo válidas como diseño de dominio y como tutorial de cómo armar algo así desde cero, pero **ese código NestJS ya no existe en el repo** (se borró; ver la nota histórica en Deploy en producción). Si estás buscando cómo funciona el sistema *hoy*, andá directo a esa sección.
+
+Este documento cubre dos cosas: el diseño del sistema (dominio, modelo de datos, flujos — sigue vigente sin importar el framework) y cómo replicar el proceso completo de armado desde cero (útil si querés adaptar esta misma base a otro rubro/negocio, documentado originalmente sobre NestJS).
 
 ---
 
@@ -293,7 +295,7 @@ El sistema corre 24/7 en la nube, todo dentro de dos proveedores (Vercel + Supab
 - **Base de datos**: [Supabase](https://supabase.com/) — un solo proyecto Postgres compartido, `stockasist` vive en su propio **schema** (no una base separada) para poder convivir con otros SaaS en el mismo proyecto de Supabase sin chocar.
 - **Bot de WhatsApp**: mismo proyecto de Vercel, expuesto vía Twilio (webhook apuntando a `<url>/api/whatsapp/webhook`).
 
-> **Nota histórica**: el backend corrió en NestJS sobre Railway, después se migró a Next.js API routes sobre Vercel como proyecto aparte del frontend (Vite + React), y finalmente ambos se unificaron en un solo proyecto de Vercel — cada paso alineando más al sistema con la arquitectura compartida para varios SaaS del mismo dueño (ver skill `saas-shared-infra`). El código NestJS/Railway y el frontend Vite viejo (`web/`) siguen en el historial de git, pero no es lo que corre en producción.
+> **Nota histórica**: el backend corrió en NestJS sobre Railway, después se migró a Next.js API routes sobre Vercel como proyecto aparte del frontend (Vite + React), y finalmente ambos se unificaron en un solo proyecto de Vercel — cada paso alineando más al sistema con la arquitectura compartida para varios SaaS del mismo dueño (ver skill `saas-shared-infra`). El código NestJS/Railway y el frontend Vite viejo (`web/`) **ya no están en el repo** — quedan solo en el historial de git (commits previos a la unificación) para quien quiera revisarlos, pero no hay ninguna carpeta activa con esa implementación.
 
 Correr el seed o cualquier script puntual contra la base de producción se hace directo con `DATABASE_URL` (Supabase es alcanzable por internet, a diferencia de Railway antes) — no hace falta `ssh` ni túneles.
 
@@ -307,7 +309,7 @@ No incluye credenciales de acceso a propósito — cada negocio tiene su propio 
 
 El proyecto que corre de verdad es `api/` (Next.js + Supabase, ver [Deploy en producción](#deploy-en-producción)). Puesta en marcha, variables de entorno y scripts están documentados ahí: [`api/README.md`](api/README.md) → secciones "Variables de entorno" y "Desarrollo local". No hace falta Docker ni Postgres local — `DATABASE_URL` apunta directo a Supabase.
 
-> **Nota histórica**: esta sección describía la puesta en marcha del backend NestJS original (Docker + Postgres local + `npm run start:dev`, con Swagger en `/docs`). Ese código sigue en `src/` y el `package.json` de la raíz por ahora, pero no es lo que corre en producción — ver la nota histórica en [Deploy en producción](#deploy-en-producción).
+> **Nota histórica**: esta sección describía la puesta en marcha del backend NestJS original (Docker + Postgres local + `npm run start:dev`, con Swagger en `/docs`). Ese código ya se borró del repo (quedó solo en el historial de git) — ver la nota histórica en [Deploy en producción](#deploy-en-producción).
 
 ## Variables de entorno
 
