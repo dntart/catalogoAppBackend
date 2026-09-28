@@ -17,13 +17,17 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
 
+  const linksVisibles = user?.esSuperAdmin
+    ? [...links, { to: '/admin', label: 'Admin' }]
+    : links;
+
   return (
     <div className="min-h-screen bg-wa-bg">
       <header className="bg-wa-header">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <span className="font-semibold text-white">Textil Stock</span>
           <nav className="flex gap-4 text-sm">
-            {links.map((link) => {
+            {linksVisibles.map((link) => {
               const isActive = link.to === '/' ? pathname === '/' : pathname.startsWith(link.to);
               return (
                 <Link

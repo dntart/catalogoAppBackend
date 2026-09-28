@@ -1,5 +1,5 @@
 import { Prisma, User } from '@prisma/client';
-import { UsersRepository } from './users.repository';
+import { UserConNegocio, UsersRepository } from './users.repository';
 
 export class UsersService {
   constructor(private readonly usersRepository: UsersRepository) {}
@@ -12,7 +12,7 @@ export class UsersService {
     return this.usersRepository.findById(id);
   }
 
-  findByWhatsappNumber(whatsappNumber: string): Promise<User | null> {
+  findByWhatsappNumber(whatsappNumber: string): Promise<UserConNegocio | null> {
     return this.usersRepository.findByWhatsappNumber(whatsappNumber);
   }
 

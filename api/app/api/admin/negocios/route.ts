@@ -13,3 +13,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const negocio = await adminService.crearNegocio(dto);
   return NextResponse.json(negocio, { status: 201 });
 });
+
+// Listado para el panel de super-admin: todos los negocios con sus usuarios
+// (email, whatsapp, activo) — sin passwordHash.
+export const GET = withErrorHandling(async (request: NextRequest) => {
+  const user = await requireUser(request);
+  requireSuperAdmin(user);
+  const negocios = await adminService.listarNegocios();
+  return NextResponse.json(negocios, { status: 200 });
+});

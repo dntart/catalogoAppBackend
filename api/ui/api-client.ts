@@ -5,10 +5,12 @@ import type {
   Categoria,
   Item,
   Movimiento,
+  NegocioConUsuarios,
   Operario,
   OrdenProduccion,
   ResumenStockItem,
   AuthenticatedUser,
+  UsuarioResumen,
 } from './types';
 
 const TOKEN_KEY = 'textilstock_token';
@@ -128,5 +130,27 @@ export async function createMovimiento(payload: {
   observaciones?: string;
 }): Promise<Movimiento> {
   const { data } = await api.post<Movimiento>('/movimientos', payload);
+  return data;
+}
+
+// --- Panel de super-admin: listado y edición de talleres ---
+
+export async function fetchAdminNegocios(): Promise<NegocioConUsuarios[]> {
+  const { data } = await api.get<NegocioConUsuarios[]>('/admin/negocios');
+  return data;
+}
+
+export async function updateAdminNegocio(
+  id: string,
+  payload: { nombre?: string; activo?: boolean },
+): Promise<void> {
+  await api.patch(`/admin/negocios/${id}`, payload);
+}
+
+export async function updateAdminUsuario(
+  id: string,
+  payload: { email?: string; whatsappNumber?: string; activo?: boolean },
+): Promise<UsuarioResumen> {
+  const { data } = await api.patch<UsuarioResumen>(`/admin/users/${id}`, payload);
   return data;
 }

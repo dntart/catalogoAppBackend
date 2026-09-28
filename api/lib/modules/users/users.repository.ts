@@ -1,5 +1,7 @@
-import { Prisma, User } from '@prisma/client';
+import { Negocio, Prisma, User } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
+
+export type UserConNegocio = User & { negocio: Negocio };
 
 export class UsersRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -12,8 +14,13 @@ export class UsersRepository {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
-  findByWhatsappNumber(whatsappNumber: string): Promise<User | null> {
-    return this.prisma.user.findUnique({ where: { whatsappNumber } });
+  /// Incluye el negocio: el webhook de WhatsApp necesita chequear
+  /// negocio.activo además de user.activo antes de responder.
+  findByWhatsappNumber(whatsappNumber: string): Promise<UserConNegocio | null> {
+    return this.prisma.user.findUnique({
+      where: { whatsappNumber },
+      include: { negocio: true },
+    });
   }
 
   create(data: Prisma.UserCreateInput): Promise<User> {

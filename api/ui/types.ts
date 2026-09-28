@@ -63,6 +63,26 @@ export interface AuthenticatedUser {
   id: string;
   email: string;
   nombre: string;
+  negocioId: string;
+  whatsappNumber: string | null;
+  esSuperAdmin: boolean;
   activo: boolean;
   createdAt: string;
+}
+
+export interface UsuarioResumen {
+  id: string;
+  nombre: string;
+  email: string;
+  whatsappNumber: string | null;
+  esSuperAdmin: boolean;
+  activo: boolean;
+}
+
+export interface NegocioConUsuarios {
+  id: string;
+  nombre: string;
+  activo: boolean;
+  createdAt: string;
+  usuarios: UsuarioResumen[];
 }

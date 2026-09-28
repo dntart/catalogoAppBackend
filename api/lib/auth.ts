@@ -47,8 +47,11 @@ export async function requireUser(request: NextRequest): Promise<AuthenticatedUs
   }
 
   const { prisma } = await import('./prisma');
-  const user = await prisma.user.findUnique({ where: { id: payload.sub } });
-  if (!user || !user.activo) {
+  const user = await prisma.user.findUnique({
+    where: { id: payload.sub },
+    include: { negocio: true },
+  });
+  if (!user || !user.activo || !user.negocio.activo) {
     throw new AuthError('Usuario inactivo o inexistente', 401);
   }
 

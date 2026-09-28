@@ -30,8 +30,11 @@ export class AuthService {
   constructor(private readonly prisma: PrismaClient) {}
 
   async validateUser(email: string, password: string): Promise<AuthenticatedUserDto> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user || !user.activo) {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      include: { negocio: true },
+    });
+    if (!user || !user.activo || !user.negocio.activo) {
       throw new AuthError('Credenciales inválidas', 401);
     }
 

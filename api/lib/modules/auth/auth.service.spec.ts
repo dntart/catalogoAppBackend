@@ -6,7 +6,12 @@ import { AuthService } from './auth.service';
 
 process.env.JWT_SECRET = 'test-secret';
 
-async function buildUser(overrides: Partial<User> = {}): Promise<User> {
+type UserConNegocio = User & { negocio: { activo: boolean } };
+
+async function buildUser(
+  overrides: Partial<User> = {},
+  negocioActivo = true,
+): Promise<UserConNegocio> {
   return {
     id: 'user-1',
     negocioId: 'negocio-1',
@@ -18,6 +23,7 @@ async function buildUser(overrides: Partial<User> = {}): Promise<User> {
     activo: true,
     createdAt: new Date(),
     ...overrides,
+    negocio: { activo: negocioActivo },
   };
 }
 
@@ -63,6 +69,15 @@ describe('AuthService', () => {
 
     it('lanza UnauthorizedException si el usuario esta inactivo', async () => {
       const user = await buildUser({ activo: false });
+      prisma.user.findUnique.mockResolvedValue(user);
+
+      await expect(
+        service.validateUser(user.email, 'contraseña-correcta'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('lanza UnauthorizedException si el negocio esta inactivo (aunque el usuario este activo)', async () => {
+      const user = await buildUser({}, false);
       prisma.user.findUnique.mockResolvedValue(user);
 
       await expect(

@@ -48,8 +48,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const owner = await usersService.findByWhatsappNumber(from);
-  if (!owner || !owner.activo) {
-    console.warn(`Mensaje ignorado de un número no registrado: ${from}`);
+  if (!owner || !owner.activo || !owner.negocio.activo) {
+    console.warn(`Mensaje ignorado de un número no registrado o inactivo: ${from}`);
     return NextResponse.json({}, { status: 200 });
   }
 
