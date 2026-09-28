@@ -34,21 +34,21 @@ export default function OperariosPage() {
   return (
     <div className="space-y-8">
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-stone-800">Nuevo operario</h2>
-        <form onSubmit={handleSubmit} className="flex items-end gap-3 rounded-lg bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-semibold text-wa-text">Nuevo operario</h2>
+        <form onSubmit={handleSubmit} className="flex items-end gap-3 rounded-lg bg-wa-bubble-in p-4 shadow-sm">
           <div>
-            <label className="mb-1 block text-xs text-stone-500">Nombre</label>
+            <label className="mb-1 block text-xs text-wa-text-light">Nombre</label>
             <input
               required
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              className="rounded border border-stone-300 px-2 py-1.5"
+              className="rounded border border-wa-border px-2 py-1.5"
             />
           </div>
           <button
             type="submit"
             disabled={submitting}
-            className="rounded bg-stone-800 px-4 py-1.5 text-white hover:bg-stone-700 disabled:opacity-50"
+            className="rounded bg-wa-green px-4 py-1.5 text-white hover:brightness-95 disabled:opacity-50"
           >
             Crear
           </button>
@@ -56,13 +56,13 @@ export default function OperariosPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-stone-800">Operarios</h2>
+        <h2 className="mb-3 text-lg font-semibold text-wa-text">Operarios</h2>
         {loading ? (
-          <p className="text-stone-500">Cargando...</p>
+          <p className="text-wa-text-light">Cargando...</p>
         ) : (
-          <div className="overflow-hidden rounded-lg bg-white shadow-sm">
+          <div className="overflow-hidden rounded-lg bg-wa-bubble-in shadow-sm">
             <table className="w-full text-left text-sm">
-              <thead className="bg-stone-100 text-stone-600">
+              <thead className="bg-wa-input-bg text-wa-text">
                 <tr>
                   <th className="px-4 py-2">Nombre</th>
                   <th className="px-4 py-2">Activo</th>
@@ -70,7 +70,7 @@ export default function OperariosPage() {
               </thead>
               <tbody>
                 {operarios.map((op) => (
-                  <tr key={op.id} className="border-t border-stone-100">
+                  <tr key={op.id} className="border-t border-wa-border">
                     <td className="px-4 py-2">{op.nombre}</td>
                     <td className="px-4 py-2">{op.activo ? 'Sí' : 'No'}</td>
                   </tr>

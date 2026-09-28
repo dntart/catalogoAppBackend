@@ -6,14 +6,22 @@ export enum FlowStep {
   SELECCION_ITEM_NOMBRE = 'SELECCION_ITEM_NOMBRE',
   SELECCION_ITEM_COLOR = 'SELECCION_ITEM_COLOR',
   COMPRA_CANTIDAD = 'COMPRA_CANTIDAD',
+  COMPRA_PRECIO = 'COMPRA_PRECIO',
+  ORDEN_MENU = 'ORDEN_MENU',
+  ORDEN_SELECCION_ABIERTA = 'ORDEN_SELECCION_ABIERTA',
+  ORDEN_AGREGAR_CANTIDAD = 'ORDEN_AGREGAR_CANTIDAD',
   ENTREGA_OPERARIO = 'ENTREGA_OPERARIO',
   ENTREGA_CANTIDAD = 'ENTREGA_CANTIDAD',
   RECEPCION_OPERARIO = 'RECEPCION_OPERARIO',
   RECEPCION_ORDEN = 'RECEPCION_ORDEN',
   RECEPCION_CANTIDAD = 'RECEPCION_CANTIDAD',
   VENTA_CANTIDAD = 'VENTA_CANTIDAD',
+  VENTA_PRECIO = 'VENTA_PRECIO',
   AJUSTE_CANTIDAD = 'AJUSTE_CANTIDAD',
   STOCK_CATEGORIA = 'STOCK_CATEGORIA',
+  REPORTE_MENU = 'REPORTE_MENU',
+  REPORTE_OPERARIA_SELECCION = 'REPORTE_OPERARIA_SELECCION',
+  CATALOGO_MENU = 'CATALOGO_MENU',
   NUEVA_OPERARIA_NOMBRE = 'NUEVA_OPERARIA_NOMBRE',
   NUEVO_ITEM_UNIDAD = 'NUEVO_ITEM_UNIDAD',
   NUEVO_ITEM_NOMBRE = 'NUEVO_ITEM_NOMBRE',
@@ -41,6 +49,7 @@ export interface MovimientoPayload {
   itemId: string;
   tipo: MovimientoTipo;
   cantidad: number;
+  montoTotal?: number;
   operarioId?: string;
   ordenProduccionId?: string;
 }
@@ -71,6 +80,7 @@ export interface AccionMovimientoPendiente {
   movimiento: {
     tipo: MovimientoTipo;
     cantidad: number;
+    montoTotal?: number;
     ordenProduccionId?: string;
   };
   etiquetaItem: string;
@@ -95,6 +105,13 @@ export interface WhatsappSession {
   /// (elegida con el sentinel "cargar operaria nueva" desde pedirOperario).
   operarioParaFlujo?: 'ENTREGA' | 'RECEPCION';
   nuevaOperariaNombrePendiente?: string;
+  /// Cantidad ya confirmada, mientras se pregunta el precio total opcional
+  /// (paso intermedio entre cantidad y confirmación en Compra/Venta).
+  cantidadPendiente?: number;
+  /// Item elegido para agregarle un reporte por operaria, o para "agregar
+  /// material a una orden abierta" — reusa `opciones` para listar, este
+  /// campo guarda el operarioId de la orden abierta seleccionada.
+  reporteOperarioId?: string;
   accionPendiente?: AccionPendiente;
 }
 

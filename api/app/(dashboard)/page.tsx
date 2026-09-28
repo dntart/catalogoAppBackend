@@ -80,13 +80,13 @@ function BarraStock({ item, colorNormal, max }: { item: ResumenStockItem; colorN
 
   return (
     <div className="flex items-center gap-3 py-1.5 pl-2">
-      <div className="w-48 shrink-0 text-sm leading-snug text-stone-700">
-        <span className="font-mono text-xs text-stone-400">{item.codigo}</span> {item.nombre}
+      <div className="w-48 shrink-0 text-sm leading-snug text-wa-text">
+        <span className="font-mono text-xs text-wa-text-light">{item.codigo}</span> {item.nombre}
       </div>
       <div className="h-5 flex-1 overflow-hidden rounded-sm" style={{ backgroundColor: COLOR_TRACK }}>
         <div className="h-full rounded-r" style={{ width: `${pct}%`, backgroundColor: fill }} />
       </div>
-      <div className="w-24 shrink-0 text-right text-sm tabular-nums text-stone-800">
+      <div className="w-24 shrink-0 text-right text-sm tabular-nums text-wa-text">
         {item.stock} {item.unidad.toLowerCase()}
       </div>
       <div className="w-28 shrink-0 text-xs">
@@ -122,11 +122,11 @@ function EncabezadoColapsable({
   return (
     <button
       onClick={onToggle}
-      className={`flex w-full items-center gap-2 rounded py-1.5 text-left hover:bg-stone-50 ${indent ? 'pl-6' : ''}`}
+      className={`flex w-full items-center gap-2 rounded py-1.5 text-left hover:bg-wa-input-bg ${indent ? 'pl-6' : ''}`}
     >
-      <span className="text-stone-400">{expandido ? '▾' : '▸'}</span>
-      <span className="text-sm font-medium text-stone-800">{etiqueta}</span>
-      <span className="text-xs text-stone-500">
+      <span className="text-wa-text-light">{expandido ? '▾' : '▸'}</span>
+      <span className="text-sm font-medium text-wa-text">{etiqueta}</span>
+      <span className="text-xs text-wa-text-light">
         {cantidad} {cantidad === 1 ? 'variante' : 'variantes'}
         {alertas > 0 && (
           <>
@@ -197,15 +197,15 @@ function SeccionStock({
   const arbol = useMemo(() => construirArbol(items), [items]);
 
   return (
-    <section className="rounded-lg bg-white p-5 shadow-sm">
+    <section className="rounded-lg bg-wa-bubble-in p-5 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between">
-        <h2 className="text-lg font-semibold text-stone-800">{titulo}</h2>
-        <span className="text-sm text-stone-500">
+        <h2 className="text-lg font-semibold text-wa-text">{titulo}</h2>
+        <span className="text-sm text-wa-text-light">
           {items.length} items{alertas > 0 && <> · <span className="font-medium text-amber-700">{alertas} con alerta</span></>}
         </span>
       </div>
       {items.length === 0 ? (
-        <p className="text-sm text-stone-500">No hay items cargados en esta categoría.</p>
+        <p className="text-sm text-wa-text-light">No hay items cargados en esta categoría.</p>
       ) : (
         <div>
           {arbol.map((nodo) =>
@@ -310,7 +310,7 @@ export default function ResumenPage() {
   );
 
   if (loading) {
-    return <p className="text-stone-500">Cargando...</p>;
+    return <p className="text-wa-text-light">Cargando...</p>;
   }
 
   return (
@@ -320,7 +320,7 @@ export default function ResumenPage() {
         value={busqueda}
         onChange={(e) => setBusqueda(e.target.value)}
         placeholder="Buscar por nombre, código o grupo..."
-        className="w-full rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm shadow-sm focus:border-stone-500 focus:outline-none"
+        className="w-full rounded-lg border border-wa-border bg-wa-bubble-in px-4 py-2 text-sm shadow-sm focus:border-wa-button-border focus:outline-none"
       />
       <SeccionStock
         titulo="Materiales"

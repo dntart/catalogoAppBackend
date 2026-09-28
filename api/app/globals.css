@@ -1,1 +1,65 @@
 @import "tailwindcss";
+
+/* Paleta WhatsApp — variables "crudas" que cambian según el tema (ver los
+   bloques de abajo). @theme las registra como tokens de Tailwind
+   (bg-wa-header, text-wa-text, etc.) apuntando a estas variables, así el
+   valor sigue siendo "vivo" en runtime (claro/oscuro) en vez de fijarse en
+   build time. */
+:root {
+  --wa-header: #075e54;
+  --wa-header-light: #128c7e;
+  --wa-green: #25d366;
+  --wa-bubble-out: #dcf8c6;
+  --wa-bubble-in: #ffffff;
+  --wa-bg: #e5ddd5;
+  --wa-input-bg: #f0f0f0;
+  --wa-text: #111111;
+  --wa-text-light: #667781;
+  --wa-border: #d1d7db;
+  --wa-button-border: #25d366;
+  --wa-button-text: #075e54;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --wa-bg: #0d1117;
+    --wa-bubble-out: #005c4b;
+    --wa-bubble-in: #202c33;
+    --wa-input-bg: #2a3942;
+    --wa-text: #e9edef;
+    --wa-text-light: #8696a0;
+    --wa-border: #2a3942;
+    --wa-button-text: #25d366;
+  }
+}
+
+:root[data-theme="dark"] {
+  --wa-bg: #0d1117;
+  --wa-bubble-out: #005c4b;
+  --wa-bubble-in: #202c33;
+  --wa-input-bg: #2a3942;
+  --wa-text: #e9edef;
+  --wa-text-light: #8696a0;
+  --wa-border: #2a3942;
+  --wa-button-text: #25d366;
+}
+
+@theme {
+  --color-wa-header: var(--wa-header);
+  --color-wa-header-light: var(--wa-header-light);
+  --color-wa-green: var(--wa-green);
+  --color-wa-bubble-out: var(--wa-bubble-out);
+  --color-wa-bubble-in: var(--wa-bubble-in);
+  --color-wa-bg: var(--wa-bg);
+  --color-wa-input-bg: var(--wa-input-bg);
+  --color-wa-text: var(--wa-text);
+  --color-wa-text-light: var(--wa-text-light);
+  --color-wa-border: var(--wa-border);
+  --color-wa-button-border: var(--wa-button-border);
+  --color-wa-button-text: var(--wa-button-text);
+}
+
+body {
+  background: var(--wa-bg);
+  color: var(--wa-text);
+}

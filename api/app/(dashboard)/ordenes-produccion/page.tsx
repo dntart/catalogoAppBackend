@@ -47,14 +47,14 @@ export default function OrdenesProduccionPage() {
   return (
     <div className="space-y-8">
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-stone-800">Nueva entrega / orden de producción</h2>
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 rounded-lg bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-semibold text-wa-text">Nueva entrega / orden de producción</h2>
+        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 rounded-lg bg-wa-bubble-in p-4 shadow-sm">
           <div>
-            <label className="mb-1 block text-xs text-stone-500">Operario</label>
+            <label className="mb-1 block text-xs text-wa-text-light">Operario</label>
             <select
               value={operarioId}
               onChange={(e) => setOperarioId(e.target.value)}
-              className="rounded border border-stone-300 px-2 py-1.5"
+              className="rounded border border-wa-border px-2 py-1.5"
             >
               {operarios.map((op) => (
                 <option key={op.id} value={op.id}>
@@ -64,18 +64,18 @@ export default function OrdenesProduccionPage() {
             </select>
           </div>
           <div className="min-w-[240px] flex-1">
-            <label className="mb-1 block text-xs text-stone-500">Observaciones</label>
+            <label className="mb-1 block text-xs text-wa-text-light">Observaciones</label>
             <input
               value={observaciones}
               onChange={(e) => setObservaciones(e.target.value)}
               placeholder="Ej: 5m de gabardina beige para 10 Zorros"
-              className="w-full rounded border border-stone-300 px-2 py-1.5"
+              className="w-full rounded border border-wa-border px-2 py-1.5"
             />
           </div>
           <button
             type="submit"
             disabled={submitting || !operarioId}
-            className="rounded bg-stone-800 px-4 py-1.5 text-white hover:bg-stone-700 disabled:opacity-50"
+            className="rounded bg-wa-green px-4 py-1.5 text-white hover:brightness-95 disabled:opacity-50"
           >
             Abrir orden
           </button>
@@ -83,13 +83,13 @@ export default function OrdenesProduccionPage() {
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-stone-800">Órdenes de producción</h2>
+        <h2 className="mb-3 text-lg font-semibold text-wa-text">Órdenes de producción</h2>
         {loading ? (
-          <p className="text-stone-500">Cargando...</p>
+          <p className="text-wa-text-light">Cargando...</p>
         ) : (
-          <div className="overflow-hidden rounded-lg bg-white shadow-sm">
+          <div className="overflow-hidden rounded-lg bg-wa-bubble-in shadow-sm">
             <table className="w-full text-left text-sm">
-              <thead className="bg-stone-100 text-stone-600">
+              <thead className="bg-wa-input-bg text-wa-text">
                 <tr>
                   <th className="px-4 py-2">Fecha</th>
                   <th className="px-4 py-2">Operario</th>
@@ -98,7 +98,7 @@ export default function OrdenesProduccionPage() {
               </thead>
               <tbody>
                 {ordenes.map((orden) => (
-                  <tr key={orden.id} className="border-t border-stone-100">
+                  <tr key={orden.id} className="border-t border-wa-border">
                     <td className="px-4 py-2">{new Date(orden.fecha).toLocaleString()}</td>
                     <td className="px-4 py-2">{nombreOperario(orden.operarioId)}</td>
                     <td className="px-4 py-2">{orden.observaciones ?? '—'}</td>

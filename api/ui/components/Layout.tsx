@@ -18,10 +18,10 @@ export function Layout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-stone-200 bg-white">
+    <div className="min-h-screen bg-wa-bg">
+      <header className="bg-wa-header">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="font-semibold text-stone-800">Textil Stock</span>
+          <span className="font-semibold text-white">Textil Stock</span>
           <nav className="flex gap-4 text-sm">
             {links.map((link) => {
               const isActive = link.to === '/' ? pathname === '/' : pathname.startsWith(link.to);
@@ -29,16 +29,16 @@ export function Layout({ children }: { children: ReactNode }) {
                 <Link
                   key={link.to}
                   href={link.to}
-                  className={isActive ? 'font-medium text-stone-900' : 'text-stone-500 hover:text-stone-800'}
+                  className={isActive ? 'font-medium text-wa-green' : 'text-white/70 hover:text-white'}
                 >
                   {link.label}
                 </Link>
               );
             })}
           </nav>
-          <div className="flex items-center gap-3 text-sm text-stone-500">
+          <div className="flex items-center gap-3 text-sm text-white/70">
             <span>{user?.nombre}</span>
-            <button onClick={logout} className="text-stone-400 hover:text-stone-700">
+            <button onClick={logout} className="hover:text-white">
               Salir
             </button>
           </div>

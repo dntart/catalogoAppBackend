@@ -14,6 +14,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const user = await requireUser(request);
   const operarioId = request.nextUrl.searchParams.get('operarioId') ?? undefined;
-  const ordenes = await ordenesProduccionService.findAll(user.negocioId, operarioId);
+  const soloAbiertas = request.nextUrl.searchParams.get('estado') === 'ABIERTA';
+  const ordenes = await ordenesProduccionService.findAll(
+    user.negocioId,
+    operarioId,
+    soloAbiertas,
+  );
   return NextResponse.json(ordenes, { status: 200 });
 });

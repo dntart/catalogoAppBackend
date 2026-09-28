@@ -73,33 +73,33 @@ export default function ItemsPage() {
   return (
     <div className="space-y-8">
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-stone-800">Nuevo item</h2>
-        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 rounded-lg bg-white p-4 shadow-sm">
+        <h2 className="mb-3 text-lg font-semibold text-wa-text">Nuevo item</h2>
+        <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 rounded-lg bg-wa-bubble-in p-4 shadow-sm">
           <div>
-            <label className="mb-1 block text-xs text-stone-500">
-              Grupo <span className="text-stone-400">(opcional, ej: Hilo)</span>
+            <label className="mb-1 block text-xs text-wa-text-light">
+              Grupo <span className="text-wa-text-light">(opcional, ej: Hilo)</span>
             </label>
             <input
               value={grupo}
               onChange={(e) => setGrupo(e.target.value)}
-              className="rounded border border-stone-300 px-2 py-1.5"
+              className="rounded border border-wa-border px-2 py-1.5"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-stone-500">Nombre</label>
+            <label className="mb-1 block text-xs text-wa-text-light">Nombre</label>
             <input
               required
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              className="rounded border border-stone-300 px-2 py-1.5"
+              className="rounded border border-wa-border px-2 py-1.5"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs text-stone-500">Categoría</label>
+            <label className="mb-1 block text-xs text-wa-text-light">Categoría</label>
             <select
               value={categoria}
               onChange={(e) => setCategoria(e.target.value as Categoria)}
-              className="rounded border border-stone-300 px-2 py-1.5"
+              className="rounded border border-wa-border px-2 py-1.5"
             >
               {CATEGORIAS.map((c) => (
                 <option key={c} value={c}>
@@ -109,11 +109,11 @@ export default function ItemsPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-stone-500">Unidad</label>
+            <label className="mb-1 block text-xs text-wa-text-light">Unidad</label>
             <select
               value={unidad}
               onChange={(e) => setUnidad(e.target.value as Unidad)}
-              className="rounded border border-stone-300 px-2 py-1.5"
+              className="rounded border border-wa-border px-2 py-1.5"
             >
               {UNIDADES.map((u) => (
                 <option key={u} value={u}>
@@ -122,25 +122,25 @@ export default function ItemsPage() {
               ))}
             </select>
           </div>
-          <label className="flex items-center gap-2 pb-1.5 text-sm text-stone-600">
+          <label className="flex items-center gap-2 pb-1.5 text-sm text-wa-text">
             <input type="checkbox" checked={tieneColor} onChange={(e) => setTieneColor(e.target.checked)} />
             Tiene color
           </label>
           {tieneColor && (
             <div>
-              <label className="mb-1 block text-xs text-stone-500">Color</label>
+              <label className="mb-1 block text-xs text-wa-text-light">Color</label>
               <input
                 required
                 value={colorNombre}
                 onChange={(e) => setColorNombre(e.target.value)}
-                className="rounded border border-stone-300 px-2 py-1.5"
+                className="rounded border border-wa-border px-2 py-1.5"
               />
             </div>
           )}
           <button
             type="submit"
             disabled={submitting}
-            className="rounded bg-stone-800 px-4 py-1.5 text-white hover:bg-stone-700 disabled:opacity-50"
+            className="rounded bg-wa-green px-4 py-1.5 text-white hover:brightness-95 disabled:opacity-50"
           >
             Crear
           </button>
@@ -150,21 +150,21 @@ export default function ItemsPage() {
 
       <section>
         <div className="mb-3 flex items-center justify-between gap-4">
-          <h2 className="text-lg font-semibold text-stone-800">Catálogo</h2>
+          <h2 className="text-lg font-semibold text-wa-text">Catálogo</h2>
           <input
             type="search"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             placeholder="Buscar por nombre, código, grupo o color..."
-            className="w-72 rounded border border-stone-300 px-3 py-1.5 text-sm focus:border-stone-500 focus:outline-none"
+            className="w-72 rounded border border-wa-border px-3 py-1.5 text-sm focus:border-wa-button-border focus:outline-none"
           />
         </div>
         {loading ? (
-          <p className="text-stone-500">Cargando...</p>
+          <p className="text-wa-text-light">Cargando...</p>
         ) : (
-          <div className="overflow-hidden rounded-lg bg-white shadow-sm">
+          <div className="overflow-hidden rounded-lg bg-wa-bubble-in shadow-sm">
             <table className="w-full text-left text-sm">
-              <thead className="bg-stone-100 text-stone-600">
+              <thead className="bg-wa-input-bg text-wa-text">
                 <tr>
                   <th className="px-4 py-2">Código</th>
                   <th className="px-4 py-2">Grupo</th>
@@ -180,9 +180,9 @@ export default function ItemsPage() {
                 {itemsFiltrados.map((item) => {
                   const resumen = resumenPorItem[item.id];
                   return (
-                    <tr key={item.id} className="border-t border-stone-100">
-                      <td className="px-4 py-2 font-mono text-xs text-stone-500">{item.codigo}</td>
-                      <td className="px-4 py-2 text-stone-500">{item.grupo ?? '—'}</td>
+                    <tr key={item.id} className="border-t border-wa-border">
+                      <td className="px-4 py-2 font-mono text-xs text-wa-text-light">{item.codigo}</td>
+                      <td className="px-4 py-2 text-wa-text-light">{item.grupo ?? '—'}</td>
                       <td className="px-4 py-2">{item.nombre}</td>
                       <td className="px-4 py-2">{item.categoria}</td>
                       <td className="px-4 py-2">{item.unidad}</td>
@@ -199,7 +199,7 @@ export default function ItemsPage() {
                           resumen.stock
                         )}
                       </td>
-                      <td className="px-4 py-2 text-stone-500">
+                      <td className="px-4 py-2 text-wa-text-light">
                         {new Date(item.createdAt).toLocaleDateString()}
                       </td>
                     </tr>
@@ -207,7 +207,7 @@ export default function ItemsPage() {
                 })}
                 {itemsFiltrados.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-stone-500">
+                    <td colSpan={8} className="px-4 py-6 text-center text-wa-text-light">
                       Ningún item coincide con "{busqueda}".
                     </td>
                   </tr>

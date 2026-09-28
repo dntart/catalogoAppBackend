@@ -17,6 +17,22 @@ export class SessionStoreService {
     return fila.estado as unknown as WhatsappSession;
   }
 
+  /// Igual que obtener(), pero además devuelve cuándo se guardó por última
+  /// vez — lo usa manejarMensaje() para detectar una lista de opciones
+  /// vieja (ver detectarListaObsoleta en conversation.service.ts).
+  async obtenerConFecha(
+    telefono: string,
+  ): Promise<{ session: WhatsappSession; actualizadoEn: Date | null }> {
+    const fila = await this.prisma.sesionWhatsapp.findUnique({ where: { telefono } });
+    if (!fila) {
+      return { session: nuevaSesion(), actualizadoEn: null };
+    }
+    return {
+      session: fila.estado as unknown as WhatsappSession,
+      actualizadoEn: fila.actualizadoEn,
+    };
+  }
+
   async guardar(telefono: string, session: WhatsappSession): Promise<void> {
     await this.prisma.sesionWhatsapp.upsert({
       where: { telefono },

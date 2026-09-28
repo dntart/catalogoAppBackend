@@ -46,4 +46,11 @@ export class OrdenesProduccionRepository {
       _sum: { cantidad: true },
     });
   }
+
+  cerrar(id: string, cerradaEn: Date): Promise<OrdenProduccion> {
+    return this.prisma.ordenProduccion.update({
+      where: { id },
+      data: { estado: 'CERRADA', cerradaEn },
+    });
+  }
 }

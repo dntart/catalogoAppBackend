@@ -74,6 +74,51 @@ describe('MovimientosService', () => {
     expect(repository.create).toHaveBeenCalledTimes(1);
   });
 
+  it('pasa montoTotal al repository cuando viene en el DTO', async () => {
+    await service.create(NEGOCIO_ID, buildDto({ montoTotal: 15000 }));
+
+    expect(repository.create).toHaveBeenCalledWith(
+      NEGOCIO_ID,
+      expect.objectContaining({ montoTotal: 15000 }),
+    );
+  });
+
+  it('monto Total queda undefined si no se informa precio', async () => {
+    await service.create(NEGOCIO_ID, buildDto());
+
+    expect(repository.create).toHaveBeenCalledWith(
+      NEGOCIO_ID,
+      expect.objectContaining({ montoTotal: undefined }),
+    );
+  });
+
+  it('buscarPorTipo filtra por tipo y rango de fechas cuando se pasan los dos', async () => {
+    const desde = new Date('2026-03-01T00:00:00.000Z');
+    const hasta = new Date('2026-03-02T00:00:00.000Z');
+    repository.findAll.mockResolvedValue([]);
+
+    await service.buscarPorTipo(NEGOCIO_ID, {
+      tipo: MovimientoTipo.VENTA,
+      desde,
+      hasta,
+    });
+
+    expect(repository.findAll).toHaveBeenCalledWith(NEGOCIO_ID, {
+      tipo: MovimientoTipo.VENTA,
+      fecha: { gte: desde, lt: hasta },
+    });
+  });
+
+  it('buscarPorTipo sin rango de fechas trae todo el historico de ese tipo', async () => {
+    repository.findAll.mockResolvedValue([]);
+
+    await service.buscarPorTipo(NEGOCIO_ID, { tipo: MovimientoTipo.CONSUMO });
+
+    expect(repository.findAll).toHaveBeenCalledWith(NEGOCIO_ID, {
+      tipo: MovimientoTipo.CONSUMO,
+    });
+  });
+
   it('valida stock suficiente antes de un CONSUMO', async () => {
     await service.create(
       NEGOCIO_ID,

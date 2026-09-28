@@ -1,4 +1,7 @@
-import { NotFoundError as NotFoundException } from '../../auth';
+import {
+  ConflictError as ConflictException,
+  NotFoundError as NotFoundException,
+} from '../../auth';
 import {
   Item,
   MovimientoTipo,
@@ -16,6 +19,7 @@ const OPERARIO_MOCK = { id: 'operario-1' } as Operario;
 const ORDEN_MOCK = {
   id: 'orden-1',
   operarioId: 'operario-1',
+  estado: 'ABIERTA',
 } as OrdenProduccion;
 const ITEM_MOCK = {
   id: 'item-1',
@@ -30,6 +34,7 @@ describe('OrdenesProduccionService', () => {
     findAll: jest.Mock;
     findById: jest.Mock;
     sumarCantidadesPorItem: jest.Mock;
+    cerrar: jest.Mock;
   };
   let operariosService: { findOne: jest.Mock };
   let itemsService: { findOne: jest.Mock };
@@ -40,6 +45,7 @@ describe('OrdenesProduccionService', () => {
       findAll: jest.fn(),
       findById: jest.fn(),
       sumarCantidadesPorItem: jest.fn(),
+      cerrar: jest.fn(),
     };
     operariosService = { findOne: jest.fn() };
     itemsService = { findOne: jest.fn() };
@@ -93,5 +99,38 @@ describe('OrdenesProduccionService', () => {
         totalCantidad: '5',
       },
     ]);
+  });
+
+  it('findAll con soloAbiertas filtra por estado ABIERTA', async () => {
+    repository.findAll.mockResolvedValue([ORDEN_MOCK]);
+
+    await service.findAll(NEGOCIO_ID, undefined, true);
+
+    expect(repository.findAll).toHaveBeenCalledWith(NEGOCIO_ID, {
+      estado: 'ABIERTA',
+    });
+  });
+
+  it('cerrar marca la orden como CERRADA con fecha', async () => {
+    repository.cerrar.mockResolvedValue({ ...ORDEN_MOCK, estado: 'CERRADA' });
+
+    await service.cerrar(NEGOCIO_ID, 'orden-1');
+
+    expect(repository.cerrar).toHaveBeenCalledWith(
+      'orden-1',
+      expect.any(Date),
+    );
+  });
+
+  it('cerrar rechaza una orden que ya no está abierta', async () => {
+    repository.findById.mockResolvedValue({
+      ...ORDEN_MOCK,
+      estado: 'CERRADA',
+    });
+
+    await expect(service.cerrar(NEGOCIO_ID, 'orden-1')).rejects.toThrow(
+      ConflictException,
+    );
+    expect(repository.cerrar).not.toHaveBeenCalled();
   });
 });

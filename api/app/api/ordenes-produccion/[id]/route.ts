@@ -12,3 +12,10 @@ export const GET = withErrorHandling(async (request: NextRequest, { params }: Pa
   const orden = await ordenesProduccionService.findOne(user.negocioId, id);
   return NextResponse.json(orden, { status: 200 });
 });
+
+export const PATCH = withErrorHandling(async (request: NextRequest, { params }: Params) => {
+  const user = await requireUser(request);
+  const { id } = await params;
+  const orden = await ordenesProduccionService.cerrar(user.negocioId, id);
+  return NextResponse.json(orden, { status: 200 });
+});

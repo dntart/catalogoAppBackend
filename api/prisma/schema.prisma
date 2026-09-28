@@ -27,6 +27,12 @@ enum MovimientoTipo {
   AJUSTE
 }
 
+enum OrdenEstado {
+  ABIERTA
+  CERRADA
+  CANCELADA
+}
+
 /// Un cliente del SaaS (un emprendimiento textil). Todos los datos de negocio
 /// cuelgan de acá — es la unidad de aislamiento entre clientes.
 model Negocio {
@@ -128,12 +134,18 @@ model Operario {
 }
 
 model OrdenProduccion {
-  id            String   @id @default(uuid())
+  id            String      @id @default(uuid())
   negocioId     String
   operarioId    String
-  fecha         DateTime @default(now())
+  fecha         DateTime    @default(now())
   observaciones String?
-  createdAt     DateTime @default(now())
+  /// ABIERTA hasta que se registra la recepción de producto terminado (o se
+  /// cancela). Antes se inferia el estado a partir de si tenia movimientos
+  /// PRODUCCION asociados — fragil para filtrar "ordenes abiertas de un
+  /// operario", que ahora es un filtro directo por esta columna.
+  estado        OrdenEstado @default(ABIERTA)
+  cerradaEn     DateTime?
+  createdAt     DateTime    @default(now())
 
   negocio     Negocio      @relation(fields: [negocioId], references: [id])
   operario    Operario     @relation(fields: [operarioId], references: [id])
@@ -152,6 +164,9 @@ model Movimiento {
   ordenProduccionId String?
   tipo              MovimientoTipo
   cantidad          Decimal        @db.Decimal(10, 2)
+  /// Precio total pagado/cobrado (COMPRA y VENTA). Null en el resto de los
+  /// tipos y en movimientos donde no se informó precio.
+  montoTotal        Decimal?       @db.Decimal(10, 2)
   fecha             DateTime       @default(now())
   observaciones     String?
   createdAt         DateTime       @default(now())

@@ -63,6 +63,7 @@ export class MovimientosService {
         : undefined,
       tipo: dto.tipo,
       cantidad: dto.cantidad,
+      montoTotal: dto.montoTotal,
       fecha: dto.fecha ? new Date(dto.fecha) : undefined,
       observaciones: dto.observaciones,
     });
@@ -76,6 +77,21 @@ export class MovimientosService {
       negocioId,
       itemId ? { itemId } : undefined,
     );
+  }
+
+  /// Para reportes: movimientos de un tipo dado, opcionalmente acotados a un
+  /// rango de fechas (ya calculado en huso horario del negocio, ver
+  /// fechas.ts) — sin rango, trae todo el histórico de ese tipo.
+  buscarPorTipo(
+    negocioId: string,
+    filtro: { tipo?: MovimientoTipo; desde?: Date; hasta?: Date },
+  ): Promise<MovimientoConRelaciones[]> {
+    return this.movimientosRepository.findAll(negocioId, {
+      ...(filtro.tipo ? { tipo: filtro.tipo } : {}),
+      ...(filtro.desde && filtro.hasta
+        ? { fecha: { gte: filtro.desde, lt: filtro.hasta } }
+        : {}),
+    });
   }
 
   async findOne(

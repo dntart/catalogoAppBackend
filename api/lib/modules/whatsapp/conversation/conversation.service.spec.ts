@@ -4,6 +4,7 @@ import {
   Item,
   MovimientoTipo,
   Operario,
+  OrdenProduccion,
   Unidad,
 } from '@prisma/client';
 import { ConversationService } from './conversation.service';
@@ -78,13 +79,32 @@ const MARIA = {
   activo: true,
 } as Operario;
 
+const ORDEN_MARIA_ABIERTA = {
+  id: 'orden-1',
+  operarioId: MARIA.id,
+  fecha: new Date('2026-03-01'),
+  estado: 'ABIERTA',
+  cerradaEn: null,
+  observaciones: null,
+} as OrdenProduccion;
+
 /** Doble en memoria de SessionStoreService (que en producción persiste en
- * Postgres) — acá alcanza con memoria, el test no ejercita esa persistencia. */
+ * Postgres) — acá alcanza con memoria, el test no ejercita esa persistencia.
+ * `obtenerConFecha` siempre devuelve la fecha actual, así ningún test pega
+ * contra el chequeo de "lista obsoleta" (que depende de que haya pasado
+ * tiempo real entre mensajes). */
 class SessionStoreServiceFake {
   private readonly sesiones = new Map<string, WhatsappSession>();
 
   async obtener(telefono: string): Promise<WhatsappSession> {
     return this.sesiones.get(telefono) ?? nuevaSesion();
+  }
+
+  async obtenerConFecha(
+    telefono: string,
+  ): Promise<{ session: WhatsappSession; actualizadoEn: Date | null }> {
+    const session = this.sesiones.get(telefono) ?? nuevaSesion();
+    return { session, actualizadoEn: new Date() };
   }
 
   async guardar(telefono: string, session: WhatsappSession): Promise<void> {
@@ -110,11 +130,16 @@ describe('ConversationService', () => {
     findOne: jest.Mock;
     create: jest.Mock;
   };
-  let movimientosService: { create: jest.Mock; findAll: jest.Mock };
+  let movimientosService: {
+    create: jest.Mock;
+    findAll: jest.Mock;
+    buscarPorTipo: jest.Mock;
+  };
   let ordenesProduccionService: {
     create: jest.Mock;
     findAll: jest.Mock;
     findOne: jest.Mock;
+    cerrar: jest.Mock;
   };
   let stockService: { getStock: jest.Mock; getResumen: jest.Mock };
 
@@ -135,6 +160,7 @@ describe('ConversationService', () => {
     movimientosService = {
       create: jest.fn().mockResolvedValue({ id: 'mov-1' }),
       findAll: jest.fn().mockResolvedValue([]),
+      buscarPorTipo: jest.fn().mockResolvedValue([]),
     };
     ordenesProduccionService = {
       create: jest
@@ -142,6 +168,7 @@ describe('ConversationService', () => {
         .mockResolvedValue({ id: 'orden-1', operarioId: MARIA.id }),
       findAll: jest.fn().mockResolvedValue([]),
       findOne: jest.fn(),
+      cerrar: jest.fn(),
     };
     stockService = {
       getStock: jest.fn().mockResolvedValue(15),
@@ -167,9 +194,12 @@ describe('ConversationService', () => {
 
     expect(respuesta).toContain('Textil Stock');
     expect(respuesta).toContain('1️⃣ Compra de material');
+    expect(respuesta).toContain('2️⃣ Orden de producción');
+    expect(respuesta).toContain('6️⃣ Reportes');
+    expect(respuesta).toContain('7️⃣ Catálogo');
   });
 
-  it('flujo de compra con color: nombre -> color -> cantidad -> confirmar -> registra', async () => {
+  it('flujo de compra con color: nombre -> color -> cantidad -> precio -> confirmar -> registra', async () => {
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
     const listadoNombres = await service.manejarMensaje(
       NEGOCIO_ID,
@@ -195,10 +225,13 @@ describe('ConversationService', () => {
     );
     expect(pideCantidad).toContain('cantidad');
 
+    const pidePrecio = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '10');
+    expect(pidePrecio).toContain('precio');
+
     const pideConfirmacion = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
-      '10',
+      'no', // sin precio
     );
     expect(pideConfirmacion).toContain('Confirmás');
     expect(movimientosService.create).not.toHaveBeenCalled();
@@ -218,9 +251,33 @@ describe('ConversationService', () => {
     expect(confirmacion).toContain('15');
   });
 
-  it('sin variantes de color, salta directo de nombre a cantidad', async () => {
+  it('compra con precio: calcula precio por unidad y lo pasa al movimiento', async () => {
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '5'); // ajuste: todos los items (Gabardina, Zorro)
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // compra
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Gabardina
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Beige
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '10'); // cantidad
+    const pideConfirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      '15.000', // formato argentino: quince mil, no quince
+    );
+    expect(pideConfirmacion).toContain('15.000');
+    expect(pideConfirmacion).toContain('1.500'); // precio por metro
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'si');
+
+    expect(movimientosService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      itemId: 'item-gabardina-beige',
+      tipo: MovimientoTipo.COMPRA,
+      cantidad: 10,
+      montoTotal: 15000,
+    });
+  });
+
+  it('sin variantes de color, salta directo de nombre a cantidad (ajuste no pide precio)', async () => {
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '4'); // ajuste: todos los items (Gabardina, Zorro)
     const pideCantidad = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
@@ -228,7 +285,13 @@ describe('ConversationService', () => {
     ); // Zorro
     expect(pideCantidad).toContain('cantidad');
 
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '-3');
+    const pideConfirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      '-3',
+    );
+    expect(pideConfirmacion).toContain('Confirmás');
+
     const confirmacion = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
@@ -278,6 +341,7 @@ describe('ConversationService', () => {
     expect(pideCantidad).toContain('cantidad');
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '10');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'no'); // sin precio
     const confirmacion = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
@@ -294,7 +358,7 @@ describe('ConversationService', () => {
 
   it('responder "no" en la confirmacion cancela sin registrar nada', async () => {
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '5');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '4'); // ajuste
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Zorro
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '4');
     const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'no');
@@ -304,9 +368,10 @@ describe('ConversationService', () => {
     expect(respuesta).toContain('Textil Stock');
   });
 
-  it('flujo entrega -> recepcion: vincula CONSUMO y PRODUCCION a la misma orden', async () => {
+  it('flujo abrir orden -> cerrar orden: vincula CONSUMO y PRODUCCION a la misma orden', async () => {
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // entrega de material
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Orden de producción
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Abrir nueva orden
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // selecciona a María (1 es "cargar operaria nueva")
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Gabardina (1 es "cargar nuevo material")
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Beige
@@ -351,7 +416,8 @@ describe('ConversationService', () => {
       ],
     });
 
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '3'); // recepcion de producto
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Orden de producción
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '3'); // Cerrar una orden abierta
     const listadoOrdenes = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
@@ -379,6 +445,62 @@ describe('ConversationService', () => {
     expect(confirmacionRecepcion).toContain('Registrado');
   });
 
+  it('orden de producción: agregar material a una orden abierta no crea una orden nueva', async () => {
+    ordenesProduccionService.findAll.mockResolvedValue([ORDEN_MARIA_ABIERTA]);
+    ordenesProduccionService.findOne.mockResolvedValue({
+      ...ORDEN_MARIA_ABIERTA,
+      movimientos: [],
+    });
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Orden de producción
+    const listadoAbiertas = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      '2', // Agregar material a una orden abierta
+    );
+    expect(listadoAbiertas).toContain('María');
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // la única orden abierta
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Gabardina (1 es "cargar nuevo material")
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Beige
+    const pideConfirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      '3', // cantidad
+    );
+    expect(pideConfirmacion).toContain('orden de María');
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'si');
+
+    expect(ordenesProduccionService.create).not.toHaveBeenCalled();
+    expect(movimientosService.create).toHaveBeenCalledWith(NEGOCIO_ID, {
+      itemId: 'item-gabardina-beige',
+      tipo: MovimientoTipo.CONSUMO,
+      cantidad: 3,
+      operarioId: 'operario-maria',
+      ordenProduccionId: 'orden-1',
+    });
+  });
+
+  it('orden de producción: ver historial muestra las órdenes cerradas', async () => {
+    ordenesProduccionService.findAll.mockResolvedValue([
+      { ...ORDEN_MARIA_ABIERTA, id: 'orden-2', estado: 'CERRADA', cerradaEn: new Date('2026-03-05') },
+    ]);
+    ordenesProduccionService.findOne.mockResolvedValue({
+      id: 'orden-2',
+      operarioId: MARIA.id,
+      movimientos: [],
+    });
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Orden de producción
+    const historial = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '4'); // Ver historial
+
+    expect(historial).toContain('María');
+    expect(historial).toContain('Textil Stock');
+  });
+
   it('propaga el error de stock insuficiente al confirmar una venta, y vuelve al menu', async () => {
     movimientosService.create.mockRejectedValue(
       new BadRequestException(
@@ -387,9 +509,10 @@ describe('ConversationService', () => {
     );
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '4'); // venta
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '3'); // venta
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Zorro (unico producto)
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '100');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'no'); // sin precio
     const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'si');
 
     expect(respuesta).toContain('⚠️');
@@ -446,10 +569,17 @@ describe('ConversationService', () => {
     expect(pideCantidad).toContain('Vellón');
     expect(pideCantidad).toContain('cantidad');
 
-    const pideConfirmacion = await service.manejarMensaje(
+    const pidePrecio = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
       '10',
+    );
+    expect(pidePrecio).toContain('precio');
+
+    const pideConfirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      'no',
     );
     expect(pideConfirmacion).toContain('agregar el material *Vellón*');
     expect(pideConfirmacion).toContain('Confirmás');
@@ -521,10 +651,17 @@ describe('ConversationService', () => {
     );
     expect(pideCantidad).toContain('Pana Negro');
 
-    const pideConfirmacion = await service.manejarMensaje(
+    const pidePrecio = await service.manejarMensaje(
       NEGOCIO_ID,
       TELEFONO,
       '8',
+    );
+    expect(pidePrecio).toContain('precio');
+
+    const pideConfirmacion = await service.manejarMensaje(
+      NEGOCIO_ID,
+      TELEFONO,
+      'no',
     );
     expect(pideConfirmacion).toContain('agregar el material *Pana Negro*');
     expect(pideConfirmacion).toContain('compra');
@@ -560,7 +697,8 @@ describe('ConversationService', () => {
     });
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // entrega
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Orden de producción
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Abrir nueva orden
     const pideNombre = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // sentinel "cargar operaria nueva"
     expect(pideNombre).toContain('¿Cómo se llama la nueva operaria?');
 
@@ -620,7 +758,8 @@ describe('ConversationService', () => {
     });
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // entrega
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '2'); // Orden de producción
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Abrir nueva orden
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // sentinel operaria nueva
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'Luján');
     const pideUnidad = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // sentinel material nuevo
@@ -671,7 +810,62 @@ describe('ConversationService', () => {
     expect(confirmacion).toContain('Registrado');
   });
 
-  it('opcion 7 muestra los ultimos movimientos con nombre de item y signo segun tipo', async () => {
+  it('reportes: "Hoy" consulta ventas del día y muestra el más vendido', async () => {
+    movimientosService.buscarPorTipo.mockResolvedValue([
+      {
+        itemId: 'item-zorro',
+        item: ZORRO,
+        cantidad: '2.00',
+        montoTotal: '14800.00',
+      },
+    ]);
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '6'); // Reportes
+    const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Hoy
+
+    expect(movimientosService.buscarPorTipo).toHaveBeenCalledWith(
+      NEGOCIO_ID,
+      expect.objectContaining({ tipo: MovimientoTipo.VENTA }),
+    );
+    expect(respuesta).toContain('Reporte de Hoy');
+    expect(respuesta).toContain('Zorro');
+    expect(respuesta).toContain('Textil Stock');
+  });
+
+  it('reportes: "Stock bajo" lista los items por debajo del mínimo', async () => {
+    stockService.getResumen.mockResolvedValue([
+      { nombre: 'Gabardina Beige', unidad: 'METRO', stock: 1, stockMinimo: 5, bajoMinimo: true },
+      { nombre: 'Zorro', unidad: 'UNIDAD', stock: 10, stockMinimo: 2, bajoMinimo: false },
+    ]);
+
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '6'); // Reportes
+    const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '7'); // Stock bajo
+
+    expect(respuesta).toContain('Gabardina Beige');
+    expect(respuesta).not.toContain('Zorro: 10');
+  });
+
+  it('catálogo: ver materiales muestra el listado y a dónde ir para agregar uno nuevo', async () => {
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '7'); // Catálogo
+    const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '1'); // Materiales
+
+    expect(respuesta).toContain('Gabardina');
+    expect(respuesta).toContain('Compra de material');
+    expect(respuesta).toContain('Textil Stock');
+  });
+
+  it('catálogo: ver operarias muestra el listado', async () => {
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
+    await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '7'); // Catálogo
+    const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '3'); // Operarias
+
+    expect(respuesta).toContain('María');
+  });
+
+  it('opcion 8 muestra los ultimos movimientos con nombre de item y signo segun tipo', async () => {
     movimientosService.findAll.mockResolvedValue([
       {
         fecha: new Date('2026-07-20'),
@@ -688,7 +882,7 @@ describe('ConversationService', () => {
     ]);
 
     await service.manejarMensaje(NEGOCIO_ID, TELEFONO, 'menu');
-    const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '7');
+    const respuesta = await service.manejarMensaje(NEGOCIO_ID, TELEFONO, '8');
 
     expect(respuesta).toContain('Gabardina Beige');
     expect(respuesta).toContain('+10.00');
