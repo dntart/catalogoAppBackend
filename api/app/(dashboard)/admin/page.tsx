@@ -1,9 +1,120 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchAdminNegocios, updateAdminNegocio, updateAdminUsuario } from '../../../ui/api-client';
+import { useEffect, useState, type FormEvent } from 'react';
+import axios from 'axios';
+import {
+  createAdminNegocio,
+  fetchAdminNegocios,
+  updateAdminNegocio,
+  updateAdminUsuario,
+} from '../../../ui/api-client';
 import { useAuth } from '../../../ui/AuthContext';
 import type { NegocioConUsuarios, UsuarioResumen } from '../../../ui/types';
+
+function FormularioNuevoTaller({ onCreado }: { onCreado: () => void }) {
+  const [nombreNegocio, setNombreNegocio] = useState('');
+  const [ownerNombre, setOwnerNombre] = useState('');
+  const [ownerEmail, setOwnerEmail] = useState('');
+  const [ownerPassword, setOwnerPassword] = useState('');
+  const [ownerWhatsappNumber, setOwnerWhatsappNumber] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    setError(null);
+    setSubmitting(true);
+    try {
+      await createAdminNegocio({
+        nombreNegocio,
+        ownerNombre,
+        ownerEmail,
+        ownerPassword,
+        ownerWhatsappNumber: ownerWhatsappNumber || undefined,
+      });
+      setNombreNegocio('');
+      setOwnerNombre('');
+      setOwnerEmail('');
+      setOwnerPassword('');
+      setOwnerWhatsappNumber('');
+      onCreado();
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        setError('Ya existe una cuenta con ese email.');
+      } else {
+        setError('No se pudo crear el taller. Revisá los datos (contraseña mínimo 8 caracteres).');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <section>
+      <h2 className="mb-3 text-lg font-semibold text-wa-text">Nuevo taller</h2>
+      <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3 rounded-lg bg-wa-bubble-in p-4 shadow-sm">
+        <div>
+          <label className="mb-1 block text-xs text-wa-text-light">Nombre del taller</label>
+          <input
+            required
+            value={nombreNegocio}
+            onChange={(e) => setNombreNegocio(e.target.value)}
+            className="rounded border border-wa-border px-2 py-1.5"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-wa-text-light">Nombre del dueño</label>
+          <input
+            required
+            value={ownerNombre}
+            onChange={(e) => setOwnerNombre(e.target.value)}
+            className="rounded border border-wa-border px-2 py-1.5"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-wa-text-light">Email</label>
+          <input
+            type="email"
+            required
+            value={ownerEmail}
+            onChange={(e) => setOwnerEmail(e.target.value)}
+            className="rounded border border-wa-border px-2 py-1.5"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-wa-text-light">Contraseña</label>
+          <input
+            type="password"
+            required
+            minLength={8}
+            value={ownerPassword}
+            onChange={(e) => setOwnerPassword(e.target.value)}
+            className="rounded border border-wa-border px-2 py-1.5"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-wa-text-light">
+            WhatsApp <span className="text-wa-text-light">(opcional)</span>
+          </label>
+          <input
+            placeholder="whatsapp:+549..."
+            value={ownerWhatsappNumber}
+            onChange={(e) => setOwnerWhatsappNumber(e.target.value)}
+            className="rounded border border-wa-border px-2 py-1.5"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={submitting}
+          className="rounded bg-wa-green px-4 py-1.5 text-white hover:brightness-95 disabled:opacity-50"
+        >
+          {submitting ? 'Creando...' : 'Crear taller'}
+        </button>
+        {error && <p className="w-full text-sm text-red-600">{error}</p>}
+      </form>
+    </section>
+  );
+}
 
 function FilaUsuario({
   usuario,
@@ -190,6 +301,13 @@ export default function AdminPage() {
     );
   }
 
+  function recargarNegocios(): void {
+    setLoading(true);
+    fetchAdminNegocios()
+      .then(setNegocios)
+      .finally(() => setLoading(false));
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -198,6 +316,8 @@ export default function AdminPage() {
           Todos los negocios dados de alta en el sistema, con el email y el número de WhatsApp de cada usuario.
         </p>
       </div>
+
+      <FormularioNuevoTaller onCreado={recargarNegocios} />
 
       {loading ? (
         <p className="text-wa-text-light">Cargando...</p>

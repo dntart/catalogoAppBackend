@@ -61,7 +61,7 @@ export default function RegistroPage() {
             required
             value={nombreNegocio}
             onChange={(e) => setNombreNegocio(e.target.value)}
-            className="w-full rounded border border-stone-300 px-3 py-2 focus:border-stone-500 focus:outline-none"
+            className="w-full rounded border border-stone-300 bg-white px-3 py-2 text-stone-900 focus:border-stone-500 focus:outline-none"
           />
         </div>
         <div>
@@ -70,7 +70,7 @@ export default function RegistroPage() {
             required
             value={ownerNombre}
             onChange={(e) => setOwnerNombre(e.target.value)}
-            className="w-full rounded border border-stone-300 px-3 py-2 focus:border-stone-500 focus:outline-none"
+            className="w-full rounded border border-stone-300 bg-white px-3 py-2 text-stone-900 focus:border-stone-500 focus:outline-none"
           />
         </div>
         <div>
@@ -80,7 +80,7 @@ export default function RegistroPage() {
             required
             value={ownerEmail}
             onChange={(e) => setOwnerEmail(e.target.value)}
-            className="w-full rounded border border-stone-300 px-3 py-2 focus:border-stone-500 focus:outline-none"
+            className="w-full rounded border border-stone-300 bg-white px-3 py-2 text-stone-900 focus:border-stone-500 focus:outline-none"
           />
         </div>
         <div>
@@ -91,7 +91,7 @@ export default function RegistroPage() {
             minLength={8}
             value={ownerPassword}
             onChange={(e) => setOwnerPassword(e.target.value)}
-            className="w-full rounded border border-stone-300 px-3 py-2 focus:border-stone-500 focus:outline-none"
+            className="w-full rounded border border-stone-300 bg-white px-3 py-2 text-stone-900 focus:border-stone-500 focus:outline-none"
           />
           <p className="mt-1 text-xs text-stone-400">Mínimo 8 caracteres</p>
         </div>
@@ -103,7 +103,7 @@ export default function RegistroPage() {
             placeholder="whatsapp:+549..."
             value={ownerWhatsappNumber}
             onChange={(e) => setOwnerWhatsappNumber(e.target.value)}
-            className="w-full rounded border border-stone-300 px-3 py-2 focus:border-stone-500 focus:outline-none"
+            className="w-full rounded border border-stone-300 bg-white px-3 py-2 text-stone-900 focus:border-stone-500 focus:outline-none"
           />
         </div>
         {error && <p className="text-sm text-red-600">{error}</p>}

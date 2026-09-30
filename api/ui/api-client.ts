@@ -140,6 +140,13 @@ export async function fetchAdminNegocios(): Promise<NegocioConUsuarios[]> {
   return data;
 }
 
+/// Alta manual de un taller — mismo payload que el self-service
+/// (RegistroNegocioPayload), pero requiere esSuperAdmin: la usa el admin
+/// cuando el dueño del taller no puede autogestionarse en /registro.
+export async function createAdminNegocio(payload: RegistroNegocioPayload): Promise<void> {
+  await api.post('/admin/negocios', payload);
+}
+
 export async function updateAdminNegocio(
   id: string,
   payload: { nombre?: string; activo?: boolean },
